@@ -22,3 +22,21 @@ clap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# HTTP client (chain REST)
+reqwest = { workspace = true }
+url = { workspace = true }
+
+# Postgres
+sqlx = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+[dev-dependencies]
+mockito = "1"
