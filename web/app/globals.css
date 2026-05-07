@@ -1,0 +1,54 @@
+@import 'tailwindcss';
+
+/*
+ * Brand tokens for the Ligate explorer. Mirrors the marketing site's
+ * dark-mode palette (sage accent, obsidian background, JetBrains Mono
+ * chrome) but stands alone — the marketing repo's @ligate/config-
+ * tailwind package is private and we keep the explorer self-contained.
+ */
+:root {
+  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-serif: 'Instrument Serif', ui-serif, Georgia, serif;
+
+  --color-bg: #0a0a0b;
+  --color-surface: #111114;
+  --color-line: #1a1a1f;
+  --color-line-2: #26262d;
+  --color-ink: #ffffff;
+  --color-muted: #a8a8b3;
+  --color-subtle: #6a6a74;
+  --color-accent: #a7d28c;
+  --color-accent-d: #8fbd70;
+}
+
+@theme {
+  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-serif: 'Instrument Serif', ui-serif, Georgia, serif;
+
+  --color-bg: #0a0a0b;
+  --color-surface: #111114;
+  --color-line: #1a1a1f;
+  --color-line-2: #26262d;
+  --color-ink: #ffffff;
+  --color-muted: #a8a8b3;
+  --color-subtle: #6a6a74;
+  --color-accent: #a7d28c;
+  --color-accent-d: #8fbd70;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: var(--color-bg);
+  }
+}
