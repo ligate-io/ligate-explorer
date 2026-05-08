@@ -11,10 +11,10 @@ You need [`pnpm`](https://pnpm.io) (Node 22+).
 ```bash
 pnpm install
 cp .env.example .env.local
-pnpm dev          # http://localhost:3000
+pnpm dev          # http://localhost:3030
 ```
 
-By default the dev server reads from a typed mock API. Flip to a live backend by setting `USE_MOCK_API=false` and pointing `NEXT_PUBLIC_API_URL` at a running [`ligate-api`](https://github.com/ligate-io/ligate-api).
+By default the dev server reads from typed mock fixtures (every route renders without a backend). Flip to a live backend by setting `USE_MOCK_API=false` and pointing `NEXT_PUBLIC_API_URL` at a running [`ligate-api`](https://github.com/ligate-io/ligate-api).
 
 ## Status
 
@@ -53,30 +53,49 @@ The frontend is a thin renderer over `api.ligate.io`. No direct chain RPC, no Po
 
 ## Routes
 
-| Route             | Purpose                                                      |
-| ----------------- | ------------------------------------------------------------ |
-| `/`               | Homepage: latest blocks + latest txs (two-column)            |
-| `/tx/[hash]`      | Tx detail: from/to/type/status/fee/signatures                |
-| `/address/[addr]` | Balance + recent tx history (paginated)                      |
-| `/schema/[id]`    | Schema browser: name, version, attestor set, recent attests  |
-| `/faucet`         | One-button drip: paste address → `Request 100 LGT`           |
-| `/info`           | Chain identity, latest height, tx/sec, link to docs/SDK      |
+| Route               | Purpose                                                                |
+| ------------------- | ---------------------------------------------------------------------- |
+| `/`                 | Dashboard: stats strip, block ticker, supply, 24h txs, attestation heatmap, sequencer set, fees, schemas + latest attestations, latest blocks + txs |
+| `/blocks`           | All blocks list with stats strip + tx-density spark + pagination       |
+| `/blocks/[height]`  | Block detail: identity (hash, prev, time), production (proposer, txs, fees), included transactions |
+| `/txs`              | All txs list with type filter chips, success/reverted/pending counts, pagination |
+| `/tx/[hash]`        | Tx detail: animated lifecycle SVG, header + execution grid, JSON payload viewer, events table |
+| `/address/[addr]`   | Balance, tx count, first seen, role bond (sequencer / attester / prover), recent transactions |
+| `/schemas`          | Schema registry list with name, id, version, owner, threshold, attestation count |
+| `/schema/[id]`      | Schema detail: threshold ring, definition, fee routing & shape, recent attestations |
+| `/faucet`           | One-button drip with circuit-trace backdrop, Server Action submit, success toast linking to tx |
+| `/info`             | Chain identity, full chain hash, RPC + API endpoints, resource cards    |
 
-`/blocks/[height]`, `/attestor-sets/[id]`, stats/charts, wallet integration, theme toggle, and i18n are all out of scope for v0. See the agent prompt for sequencing.
+Search bar in the header auto-routes by input shape: `lig1…` → `/address/[addr]`, `lsc1…` → `/schema/[id]`, 64-char hex → `/tx/[hash]`, digits → `/blocks/[height]`.
+
+Out of scope for v0: `/attestor-sets/[id]`, charts beyond the homepage widgets, wallet integration, light mode, i18n.
 
 ## Layout
 
 ```
 ligate-explorer/
-├── app/              Next.js 15 App Router
-│   ├── globals.css   Tailwind v4 + brand tokens
-│   ├── layout.tsx
-│   └── page.tsx      Homepage
-├── lib/              Helpers (api client, formatters, validators)
-├── public/           Static assets (TBD)
-├── package.json
-├── next.config.ts
-└── tsconfig.json
+├── app/              Next.js 15 App Router (10 routes)
+│   ├── globals.css   Tailwind v4 + full brand token set + utility classes
+│   ├── layout.tsx    MonoStrip + Header + main + Footer wrapper
+│   ├── page.tsx      Homepage dashboard
+│   ├── blocks/, tx/, txs/, schema/, schemas/, address/[addr]/
+│   ├── faucet/       page.tsx + faucet-form.tsx + actions.ts (Server Action)
+│   └── info/
+├── components/       Shared UI
+│   ├── shell:        header.tsx (search auto-routes), footer.tsx, mono-strip.tsx
+│   ├── ui:           ui.tsx (FrameCard / Eyebrow / StatusPill / TypeTag / LV),
+│   │                 copy-button.tsx, json-viewer.tsx
+│   ├── svgs.tsx      NetworkOrb, TxFlow, ThresholdRing, BlockSpark, CircuitDrop, icons
+│   ├── dashboard.tsx 7 home widgets (Supply, Tx24h, DailyAttestations, Sequencers, FeeTracker, StatsStrip, RunNodeStrip)
+│   ├── block-ticker-card.tsx  Client widget with live ETA progress bar
+│   ├── tables.tsx    BlocksTable + TxsTable (client; useRouter for click navigation)
+│   └── pagination.tsx
+├── lib/
+│   ├── api.ts        Server-only API client (USE_MOCK_API toggle)
+│   ├── api-types.ts  Wire types
+│   ├── mock.ts       Typed fixtures (36 blocks, 60 txs, 5 schemas, addresses with roles)
+│   └── format.ts     trunc, ago, fmtLgt, isoDate, shortHash
+└── public/           Favicons (mirrors ligate.io) + site.webmanifest
 ```
 
 ## Environment

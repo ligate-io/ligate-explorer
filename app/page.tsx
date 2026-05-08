@@ -1,176 +1,352 @@
-import { getLatestBlocks, getChainInfo } from '@/lib/db'
-import { formatRelativeTime } from '@/lib/format'
+import Link from 'next/link'
+import {
+  getInfo,
+  getLatestBlocks,
+  getLatestTxs,
+  getSchemas,
+} from '@/lib/api'
+import { trunc, fmtLgt } from '@/lib/format'
+import { BlockTickerCard } from '@/components/block-ticker-card'
+import {
+  DailyAttestationsCard,
+  FeeTrackerCard,
+  SequencersCard,
+  StatsStrip,
+  SupplyCard,
+  Tx24hCard,
+} from '@/components/dashboard'
+import { NetworkOrb } from '@/components/svgs'
+import { Eyebrow, FrameCard } from '@/components/ui'
+import { BlocksTable, TxsTable } from '@/components/tables'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export default async function HomePage() {
-  const [blocks, info] = await Promise.all([
+  const [info, allBlocks, allTxs, schemas] = await Promise.all([
+    getInfo(),
     getLatestBlocks(20),
-    getChainInfo(),
+    getLatestTxs(20),
+    getSchemas(),
   ])
 
+  const blocks = allBlocks.slice(0, 8)
+  const txs = allTxs.slice(0, 8)
+  const attestationTxs = allTxs
+    .filter((t) => t.type === 'SubmitAttestation')
+    .slice(0, 6)
+  const schemaList = schemas.slice(0, 5)
+
   return (
-    <main className="min-h-screen">
-      <MonoStrip />
-
-      <section className="mx-auto max-w-6xl px-6 pt-20 pb-12">
-        <Eyebrow text={info?.chain_id ?? 'Ligate Chain devnet'} />
-        <h1 className="mt-6 font-serif text-6xl leading-[1.05] tracking-tight md:text-7xl">
-          Block <em className="text-[var(--color-accent)]">explorer</em>
-        </h1>
-        <p className="mt-6 max-w-xl text-lg text-[var(--color-muted)]">
-          Live state of Ligate Chain. Blocks, transactions, schemas, attestor
-          sets, and attestations.
-        </p>
-
-        {info ? (
-          <ChainBadges info={info} />
-        ) : (
-          <p className="mt-8 font-mono text-xs tracking-[0.18em] text-[var(--color-subtle)] uppercase">
-            Indexer offline
-          </p>
-        )}
-      </section>
-
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-        <SectionHeader text="Latest blocks" />
-
-        <FrameCorners>
-          {blocks.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <ul className="divide-y divide-[var(--color-line)]">
-              {blocks.map((b) => (
-                <li
-                  key={b.height}
-                  className="flex items-baseline justify-between px-6 py-4 hover:bg-[var(--color-surface)]"
-                >
-                  <div>
-                    <span className="font-mono text-sm text-[var(--color-accent)]">
-                      #{b.height.toString()}
-                    </span>
-                    <span className="ml-3 font-mono text-xs text-[var(--color-subtle)]">
-                      {b.tx_count} tx
-                    </span>
-                  </div>
-                  <span className="font-mono text-xs text-[var(--color-muted)]">
-                    {formatRelativeTime(b.timestamp)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </FrameCorners>
-      </section>
-
-      <MonoStrip />
-    </main>
-  )
-}
-
-// ---- Inline brand chrome (will graduate to /components when there's >1 page)
-
-function MonoStrip() {
-  return (
-    <div className="border-y border-[var(--color-line)] bg-[var(--color-surface)]">
-      <div className="mx-auto flex max-w-6xl justify-between px-6 py-2 font-mono text-[10px] tracking-[0.2em] text-[var(--color-subtle)] uppercase">
-        <span>Ligate Chain · explorer</span>
-        <span>v0 devnet</span>
-      </div>
-    </div>
-  )
-}
-
-function Eyebrow({ text }: { text: string }) {
-  return (
-    <div className="flex items-center gap-3 font-mono text-[11px] tracking-[0.22em] text-[var(--color-muted)] uppercase">
-      <span className="block h-px w-8 bg-[var(--color-accent)]" />
-      {text}
-    </div>
-  )
-}
-
-function SectionHeader({ text }: { text: string }) {
-  return (
-    <h2 className="mb-6 font-mono text-xs tracking-[0.22em] text-[var(--color-muted)] uppercase">
-      {text}
-    </h2>
-  )
-}
-
-function ChainBadges({
-  info,
-}: {
-  info: { chain_id: string; chain_hash: string; version: string }
-}) {
-  return (
-    <dl className="mt-10 grid grid-cols-1 gap-px overflow-hidden rounded-md border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-3">
-      <Badge label="Chain id" value={info.chain_id} mono />
-      <Badge
-        label="Chain hash"
-        value={`${info.chain_hash.slice(0, 8)}…${info.chain_hash.slice(-6)}`}
-        mono
-      />
-      <Badge label="Node version" value={`v${info.version}`} mono />
-    </dl>
-  )
-}
-
-function Badge({
-  label,
-  value,
-  mono,
-}: {
-  label: string
-  value: string
-  mono?: boolean
-}) {
-  return (
-    <div className="bg-[var(--color-bg)] px-5 py-4">
-      <dt className="font-mono text-[10px] tracking-[0.22em] text-[var(--color-subtle)] uppercase">
-        {label}
-      </dt>
-      <dd
-        className={`mt-1 text-sm text-[var(--color-ink)] ${mono ? 'font-mono' : ''}`}
+    <>
+      {/* Hero */}
+      <section
+        style={{ position: 'relative', padding: '40px 0 28px', overflow: 'hidden' }}
       >
-        {value}
-      </dd>
-    </div>
-  )
-}
+        <div className="dot-grid" style={{ opacity: 0.5 }} />
+        <div
+          style={{
+            position: 'relative',
+            display: 'grid',
+            gridTemplateColumns: '1fr 280px',
+            gap: 48,
+            alignItems: 'center',
+          }}
+        >
+          <div>
+            <Eyebrow>Ligate Chain — devnet 1</Eyebrow>
+            <h1
+              style={{
+                marginTop: 18,
+                fontFamily: 'var(--font-serif)',
+                fontSize: 64,
+                lineHeight: 0.96,
+                letterSpacing: '-0.02em',
+                color: 'var(--color-ink)',
+                maxWidth: '20ch',
+                fontWeight: 400,
+                margin: '18px 0 0',
+              }}
+            >
+              The receipt layer for AI,{' '}
+              <em
+                style={{ fontStyle: 'italic', color: 'var(--color-accent)' }}
+              >
+                observed
+              </em>{' '}
+              in real time.
+            </h1>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <NetworkOrb size={220} />
+          </div>
+        </div>
+      </section>
 
-function FrameCorners({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="relative rounded-md border border-[var(--color-line)]">
-      <Corner className="-top-px -left-px border-t border-l" />
-      <Corner className="-top-px -right-px border-t border-r" />
-      <Corner className="-bottom-px -left-px border-b border-l" />
-      <Corner className="-right-px -bottom-px border-r border-b" />
-      {children}
-    </div>
-  )
-}
+      {/* Stats strip */}
+      <div style={{ marginBottom: 24 }}>
+        <StatsStrip info={info} />
+      </div>
 
-function Corner({ className }: { className: string }) {
-  return (
-    <span
-      className={`absolute h-3 w-3 border-[var(--color-accent)] ${className}`}
-      aria-hidden="true"
-    />
-  )
-}
+      {/*
+        Run-a-light-node strip. Hidden until light node ships
+        (no shipped client today). Keep code in tree for revival.
+      <div style={{ marginBottom: 20 }}>
+        <RunNodeStrip />
+      </div>
+      */}
 
-function EmptyState() {
-  return (
-    <div className="px-6 py-16 text-center">
-      <p className="font-mono text-xs tracking-[0.2em] text-[var(--color-subtle)] uppercase">
-        No blocks indexed yet
-      </p>
-      <p className="mt-4 mx-auto max-w-md text-sm text-[var(--color-muted)]">
-        Point <code className="font-mono text-[var(--color-accent)]">ligate-indexer</code>
-        {' '}at a running Ligate Chain node to start populating this view.
-      </p>
-    </div>
+      {/* Row 1: block ticker / supply / 24h txs */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1.1fr 1fr 1.1fr',
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+        <BlockTickerCard latestBlock={info.latest_block} />
+        <SupplyCard />
+        <Tx24hCard />
+      </div>
+
+      {/* Row 2: attestations heatmap / sequencers / fees */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1.4fr 1fr 1.2fr',
+          gap: 16,
+          marginBottom: 48,
+        }}
+      >
+        <DailyAttestationsCard />
+        <SequencersCard />
+        <FeeTrackerCard />
+      </div>
+
+      {/* Row 3: schemas + latest attestations */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 24,
+          marginBottom: 48,
+        }}
+      >
+        <FrameCard padding={0}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '18px 22px',
+              borderBottom: '1px solid var(--color-line)',
+            }}
+          >
+            <Eyebrow>Schemas</Eyebrow>
+            <Link
+              href="/schemas"
+              className="mono link"
+              style={{
+                fontSize: 10,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+              }}
+            >
+              View all →
+            </Link>
+          </div>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Threshold</th>
+                <th>Attestations</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schemaList.map((s) => (
+                <tr key={s.schema_id}>
+                  <td>
+                    <Link
+                      href={`/schema/${s.schema_id}`}
+                      style={{ display: 'block' }}
+                    >
+                      <div
+                        className="serif"
+                        style={{
+                          fontSize: 16,
+                          color: 'var(--color-ink)',
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        {s.name}
+                      </div>
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: 10,
+                          color: 'var(--color-subtle)',
+                          marginTop: 2,
+                          letterSpacing: '0.08em',
+                        }}
+                      >
+                        v{s.version} · {trunc(s.schema_id, 6, 4)}
+                      </div>
+                    </Link>
+                  </td>
+                  <td>
+                    <span className="mono" style={{ color: 'var(--color-accent)' }}>
+                      {s.threshold}
+                    </span>
+                  </td>
+                  <td className="mono tab-num">
+                    {s.attestation_count.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </FrameCard>
+
+        <FrameCard padding={0}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '18px 22px',
+              borderBottom: '1px solid var(--color-line)',
+            }}
+          >
+            <Eyebrow>Latest attestations</Eyebrow>
+            <Link
+              href="/txs"
+              className="mono link"
+              style={{
+                fontSize: 10,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+              }}
+            >
+              View all →
+            </Link>
+          </div>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Hash</th>
+                <th>Block</th>
+                <th>Submitter</th>
+                <th>Fee</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attestationTxs.map((t) => (
+                <tr key={t.hash}>
+                  <td>
+                    <Link
+                      href={`/tx/${t.hash}`}
+                      className="h-mono"
+                      style={{ display: 'block' }}
+                    >
+                      {trunc(t.hash, 6, 4)}
+                    </Link>
+                  </td>
+                  <td>
+                    <Link
+                      href={`/blocks/${t.height}`}
+                      className="mono"
+                      style={{ color: 'var(--color-muted)' }}
+                    >
+                      #{t.height}
+                    </Link>
+                  </td>
+                  <td>
+                    <Link
+                      href={`/address/${t.sender}`}
+                      className="h-mono"
+                    >
+                      {trunc(t.sender, 6, 4)}
+                    </Link>
+                  </td>
+                  <td>
+                    <span
+                      className="mono"
+                      style={{ color: 'var(--color-bone)', fontSize: 11 }}
+                    >
+                      {fmtLgt(t.fee_nano)}{' '}
+                      <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </FrameCard>
+      </div>
+
+      {/* Row 4: blocks + txs */}
+      <section
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 24,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 14,
+            }}
+          >
+            <Eyebrow>Latest blocks</Eyebrow>
+            <Link
+              href="/blocks"
+              className="mono link"
+              style={{
+                fontSize: 11,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+              }}
+            >
+              View all →
+            </Link>
+          </div>
+          <FrameCard padding={0}>
+            <BlocksTable rows={blocks} />
+          </FrameCard>
+        </div>
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 14,
+            }}
+          >
+            <Eyebrow>Latest transactions</Eyebrow>
+            <Link
+              href="/txs"
+              className="mono link"
+              style={{
+                fontSize: 11,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+              }}
+            >
+              View all →
+            </Link>
+          </div>
+          <FrameCard padding={0}>
+            <TxsTable rows={txs} showBlock={false} />
+          </FrameCard>
+        </div>
+      </section>
+    </>
   )
 }
