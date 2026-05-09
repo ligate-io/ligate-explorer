@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { CircuitDrop } from '@/components/svgs'
+import { FaucetBgImage } from '@/components/faucet-bg-image'
 import { Eyebrow } from '@/components/ui'
 import { FaucetForm } from './faucet-form'
 
@@ -8,8 +8,11 @@ export const metadata: Metadata = { title: 'Faucet' }
 export default function FaucetPage() {
   return (
     <div style={{ position: 'relative' }}>
-      <div className="circuit-bg">
-        <CircuitDrop />
+      {/* Backdrop: parametric curve field, blurred. The mask in
+          .circuit-bg fades the edges into obsidian so the form
+          never has to contend with the full-strength image. */}
+      <div className="circuit-bg" style={{ opacity: 0.7 }}>
+        <FaucetBgImage />
       </div>
 
       <div
@@ -33,7 +36,7 @@ export default function FaucetPage() {
         >
           Get test{' '}
           <em style={{ fontStyle: 'italic', color: 'var(--color-accent)' }}>
-            $LGT
+            LGT
           </em>
         </h1>
         <p
@@ -44,7 +47,7 @@ export default function FaucetPage() {
             maxWidth: 540,
           }}
         >
-          Drip 100 $LGT into a devnet address. One drip per address per hour. Funds are testnet-only and have no value.
+          Drip 100 LGT into a devnet address. One drip per address per hour. Funds are testnet-only and have no value.
         </p>
 
         <FaucetForm />
@@ -59,7 +62,7 @@ export default function FaucetPage() {
         >
           {[
             { k: 'Limit', v: '1 drip / address / hour' },
-            { k: 'Amount', v: '100.000000000 LGT' },
+            { k: 'Amount', v: '100 LGT' },
             { k: 'Confirmation', v: '~12 seconds' },
           ].map((it) => (
             <div key={it.k}>
@@ -97,7 +100,7 @@ export default function FaucetPage() {
               lineHeight: 1.8,
             }}
           >
-            // devnet only — funds have no value
+            // devnet only. Funds have no value.
             <br />
             // drip emits a Transfer tx signed by the faucet sequencer
             <br />

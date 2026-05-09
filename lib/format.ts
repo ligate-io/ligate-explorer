@@ -31,6 +31,20 @@ export function fmtLgtTrim(nano: bigint | string | number): string {
   return small ? `${big.toString()}.${small}` : big.toString()
 }
 
+// Human-readable LGT amount with thousands separators on the integer
+// part and trailing zeros trimmed off the fractional part. Use for
+// supply tiles or anywhere a round integer should read as a number,
+// not as a 9-decimal token amount.
+export function fmtLgtCompact(nano: bigint | string | number): string {
+  const n = typeof nano === 'bigint' ? nano : BigInt(nano)
+  const big = n / 1_000_000_000n
+  const small = n % 1_000_000_000n
+  const wholeFmt = big.toLocaleString('en-US')
+  if (small === 0n) return wholeFmt
+  const fracStr = small.toString().padStart(9, '0').replace(/0+$/, '')
+  return fracStr ? `${wholeFmt}.${fracStr}` : wholeFmt
+}
+
 export function trunc(s: string, head = 6, tail = 4): string {
   if (!s || s.length <= head + tail + 1) return s
   return s.slice(0, head) + '…' + s.slice(-tail)

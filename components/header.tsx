@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
+import { ExplorerLockup } from './lockup'
 import { SearchIcon } from './svgs'
 
 const TABS = [
@@ -28,35 +29,8 @@ function activeTab(pathname: string): string | null {
 
 function Wordmark() {
   return (
-    <Link
-      href="/"
-      style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}
-    >
-      <svg width="22" height="22" viewBox="0 0 22 22">
-        <rect
-          x="1"
-          y="1"
-          width="20"
-          height="20"
-          stroke="#a7d28c"
-          fill="none"
-          strokeWidth="1"
-        />
-        <path d="M5 11 L9 7 L13 11 L9 15 Z" fill="#a7d28c" />
-        <circle cx="15" cy="11" r="2" fill="none" stroke="#a7d28c" strokeWidth="1" />
-      </svg>
-      <div
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-          letterSpacing: '0.18em',
-          textTransform: 'uppercase',
-          color: 'var(--color-ink)',
-        }}
-      >
-        Ligate <span style={{ color: 'var(--color-subtle)' }}>·</span>{' '}
-        <span style={{ color: 'var(--color-accent)' }}>explorer</span>
-      </div>
+    <Link href="/" style={{ flexShrink: 0 }}>
+      <ExplorerLockup symbolSize={26} wordSize={15} />
     </Link>
   )
 }
@@ -76,7 +50,7 @@ function SearchBar() {
     const hex = v.replace(/^0x/, '')
     if (/^[a-f0-9]{64}$/i.test(hex)) return router.push(`/tx/0x${hex}`)
     if (/^\d+$/.test(v)) return router.push(`/blocks/${parseInt(v, 10)}`)
-    setErr('Unrecognized — paste a tx hash, address, schema id, or block height')
+    setErr('Unrecognized. Paste a tx hash, address, schema id, or block height.')
   }
 
   return (
@@ -109,6 +83,8 @@ export function Header() {
       style={{
         borderBottom: '1px solid var(--color-line)',
         background: 'var(--color-bg)',
+        position: 'relative',
+        zIndex: 10,
       }}
     >
       <div

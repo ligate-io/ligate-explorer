@@ -8,7 +8,7 @@
 // composition (we don't have a light node yet; the strip stays in
 // code for when one ships).
 
-import { fmtLgt } from '@/lib/format'
+import { fmtLgtCompact } from '@/lib/format'
 import { FrameCard } from './ui'
 
 export function RunNodeStrip() {
@@ -360,15 +360,41 @@ export function DailyAttestationsCard() {
   )
 }
 
-export function SequencersCard() {
-  const active = 12
-  const idle = 4
-  const jailed = 1
-  const rows = [
-    { label: 'Active', value: active, color: 'var(--color-accent)' },
-    { label: 'Idle', value: idle, color: '#6fb8d9' },
-    { label: 'Jailed', value: jailed, color: 'var(--color-coral)' },
+// AttestorSetsCard replaces the original SequencersCard for v0.
+// Devnet runs single-sequencer (per chain repo #79) so a sequencer
+// distribution widget would be fiction. The attestor-set distribution
+// IS real data driven by registered schemas, fits the same visual
+// shape, and grows as schemas register. Tracking issue for restoring
+// a real Sequencers widget once multi-sequencer ships:
+//   ligate-io/ligate-explorer issue (filed alongside this swap).
+export function AttestorSetsCard({
+  schemas,
+}: {
+  schemas: { threshold: string }[]
+}) {
+  const buckets = new Map<string, number>()
+  for (const s of schemas) {
+    buckets.set(s.threshold, (buckets.get(s.threshold) ?? 0) + 1)
+  }
+  // Sort by required-signature count then total members so the legend
+  // reads 1-of-1 → 2-of-3 → 3-of-5 in a stable order.
+  const palette = [
+    'var(--color-accent)',
+    '#6fb8d9',
+    'var(--color-amber)',
+    '#c9a3e8',
+    'var(--color-coral)',
   ]
+  const rows = [...buckets.entries()]
+    .map(([label, value]) => {
+      const [have, total] = label.split(' of ').map((n) => parseInt(n, 10))
+      return { label, value, have, total }
+    })
+    .sort((a, b) => a.have - b.have || a.total - b.total)
+    .map((r, i) => ({ ...r, color: palette[i % palette.length] }))
+
+  const total = rows.reduce((acc, r) => acc + r.value, 0) || 1
+
   return (
     <FrameCard padding={22}>
       <div
@@ -388,10 +414,10 @@ export function SequencersCard() {
             color: 'var(--color-subtle)',
           }}
         >
-          Sequencer set
+          Attestor sets
         </div>
         <a
-          href="/info"
+          href="/schemas"
           className="mono link"
           style={{
             fontSize: 10,
@@ -404,9 +430,12 @@ export function SequencersCard() {
         </a>
       </div>
       <div style={{ display: 'flex', height: 4, marginBottom: 22 }}>
-        <div style={{ flex: active, background: 'var(--color-accent)' }} />
-        <div style={{ flex: idle, background: '#6fb8d9' }} />
-        <div style={{ flex: jailed, background: 'var(--color-coral)' }} />
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            style={{ flex: row.value, background: row.color }}
+          />
+        ))}
       </div>
       {rows.map((row, i) => (
         <div
@@ -544,7 +573,7 @@ export function StatsStrip({
     { label: 'Latest block', value: '#' + info.latest_block.toLocaleString(), mono: true },
     { label: 'TX / sec', value: info.tx_per_second.toFixed(2), serif: true },
     { label: 'Finality', value: info.finality, mono: true },
-    { label: '$LGT supply', value: fmtLgt(info.supply_nano), mono: true },
+    { label: 'LGT supply', value: fmtLgtCompact(info.supply_nano), mono: true },
     {
       label: 'Network',
       value: (

@@ -8,14 +8,14 @@ import {
 import { trunc, fmtLgt } from '@/lib/format'
 import { BlockTickerCard } from '@/components/block-ticker-card'
 import {
+  AttestorSetsCard,
   DailyAttestationsCard,
   FeeTrackerCard,
-  SequencersCard,
   StatsStrip,
   SupplyCard,
   Tx24hCard,
 } from '@/components/dashboard'
-import { NetworkOrb } from '@/components/svgs'
+import { HeroBackdrop } from '@/components/hero-backdrop'
 import { Eyebrow, FrameCard } from '@/components/ui'
 import { BlocksTable, TxsTable } from '@/components/tables'
 
@@ -39,22 +39,27 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* Hero */}
-      <section
-        style={{ position: 'relative', padding: '40px 0 28px', overflow: 'hidden' }}
-      >
-        <div className="dot-grid" style={{ opacity: 0.5 }} />
-        <div
+      {/*
+        Hero atmosphere band. The hero text + the stats strip + the
+        first dashboard widget row sit on top of a blurred spirograph
+        backdrop that bleeds under everything in this wrapper. The
+        radial mask in HeroBackdrop fades the edges so the cards don't
+        sit on a hard rectangle.
+      */}
+      <div style={{ position: 'relative' }}>
+        <HeroBackdrop />
+
+        <section
           style={{
             position: 'relative',
-            display: 'grid',
-            gridTemplateColumns: '1fr 280px',
-            gap: 48,
-            alignItems: 'center',
+            zIndex: 1,
+            padding: '40px 0 28px',
+            overflow: 'hidden',
           }}
         >
-          <div>
-            <Eyebrow>Ligate Chain — devnet 1</Eyebrow>
+          <div className="dot-grid" style={{ opacity: 0.5 }} />
+          <div style={{ position: 'relative' }}>
+            <Eyebrow>Ligate Chain · devnet 1</Eyebrow>
             <h1
               style={{
                 marginTop: 18,
@@ -63,7 +68,7 @@ export default async function HomePage() {
                 lineHeight: 0.96,
                 letterSpacing: '-0.02em',
                 color: 'var(--color-ink)',
-                maxWidth: '20ch',
+                maxWidth: '22ch',
                 fontWeight: 400,
                 margin: '18px 0 0',
               }}
@@ -77,37 +82,36 @@ export default async function HomePage() {
               in real time.
             </h1>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <NetworkOrb size={220} />
-          </div>
+        </section>
+
+        {/* Stats strip */}
+        <div style={{ position: 'relative', zIndex: 1, marginBottom: 24 }}>
+          <StatsStrip info={info} />
         </div>
-      </section>
 
-      {/* Stats strip */}
-      <div style={{ marginBottom: 24 }}>
-        <StatsStrip info={info} />
-      </div>
+        {/*
+          Run-a-light-node strip. Hidden until light node ships
+          (no shipped client today). Keep code in tree for revival.
+        <div style={{ marginBottom: 20 }}>
+          <RunNodeStrip />
+        </div>
+        */}
 
-      {/*
-        Run-a-light-node strip. Hidden until light node ships
-        (no shipped client today). Keep code in tree for revival.
-      <div style={{ marginBottom: 20 }}>
-        <RunNodeStrip />
-      </div>
-      */}
-
-      {/* Row 1: block ticker / supply / 24h txs */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1.1fr 1fr 1.1fr',
-          gap: 16,
-          marginBottom: 16,
-        }}
-      >
-        <BlockTickerCard latestBlock={info.latest_block} />
-        <SupplyCard />
-        <Tx24hCard />
+        {/* Row 1: block ticker / supply / 24h txs */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'grid',
+            gridTemplateColumns: '1.1fr 1fr 1.1fr',
+            gap: 16,
+            marginBottom: 16,
+          }}
+        >
+          <BlockTickerCard latestBlock={info.latest_block} />
+          <SupplyCard />
+          <Tx24hCard />
+        </div>
       </div>
 
       {/* Row 2: attestations heatmap / sequencers / fees */}
@@ -120,7 +124,7 @@ export default async function HomePage() {
         }}
       >
         <DailyAttestationsCard />
-        <SequencersCard />
+        <AttestorSetsCard schemas={schemas} />
         <FeeTrackerCard />
       </div>
 

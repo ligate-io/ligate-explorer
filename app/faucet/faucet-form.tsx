@@ -100,7 +100,7 @@ export function FaucetForm() {
                   fontFamily: 'var(--font-serif)',
                 }}
               >
-                100.000000000 LGT
+                100 LGT
               </span>
             </div>
             <button

@@ -14,7 +14,7 @@ export async function dripAction(formData: FormData): Promise<DripActionResult> 
   if (!ADDR_REGEX.test(raw)) {
     return {
       kind: 'invalid',
-      message: 'Invalid address — must match lig1[a-z0-9]{38+}',
+      message: 'Invalid address. Must match lig1[a-z0-9]{38+}',
     }
   }
 

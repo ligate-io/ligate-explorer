@@ -98,7 +98,7 @@ export default async function AddressPage({
               marginBottom: 12,
             }}
           >
-            $LGT balance
+            LGT balance
           </div>
           <div
             className="serif"

@@ -36,7 +36,11 @@ export function BlocksTable({ rows }: { rows: Block[] }) {
               <span className="h-mono">{trunc(b.hash, 8, 6)}</span>
             </td>
             <td>
-              <span className="mono" style={{ color: 'var(--color-muted)' }}>
+              <span
+                className="mono"
+                style={{ color: 'var(--color-muted)' }}
+                suppressHydrationWarning
+              >
                 {ago(Math.floor((Date.now() - b.timestamp) / 1000))}
               </span>
             </td>
@@ -129,7 +133,11 @@ export function TxsTable({
               </span>
             </td>
             <td>
-              <span className="mono" style={{ color: 'var(--color-muted)' }}>
+              <span
+                className="mono"
+                style={{ color: 'var(--color-muted)' }}
+                suppressHydrationWarning
+              >
                 {ago(Math.floor((Date.now() - t.timestamp) / 1000))}
               </span>
             </td>
