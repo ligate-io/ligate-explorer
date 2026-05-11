@@ -45,12 +45,32 @@ function SearchBar() {
     const v = val.trim()
     if (!v) return
     setErr('')
+    // Bech32m identifiers: each HRP routes to a different page. Order
+    // matters because regexes are tried top-to-bottom; specific HRPs
+    // before more general ones.
     if (/^lig1[a-z0-9]+$/.test(v)) return router.push(`/address/${v}`)
     if (/^lsc1[a-z0-9]+$/.test(v)) return router.push(`/schema/${v}`)
-    const hex = v.replace(/^0x/, '')
-    if (/^[a-f0-9]{64}$/i.test(hex)) return router.push(`/tx/0x${hex}`)
+    if (/^ltx1[a-z0-9]+$/.test(v)) return router.push(`/tx/${v}`)
+    // Hex backward-compat: chain still accepts `0x...` hex on the tx
+    // path via FromStr; we route through `/tx/0x...` to keep the URL
+    // shape consistent with the existing pattern.
+    const hex = v.replace(/^0x/i, '')
+    if (/^[a-f0-9]{64}$/i.test(hex)) return router.push(`/tx/0x${hex.toLowerCase()}`)
+    // Block height (decimal int).
     if (/^\d+$/.test(v)) return router.push(`/blocks/${parseInt(v, 10)}`)
-    setErr('Unrecognized. Paste a tx hash, address, schema id, or block height.')
+    // Other bech32m families exist on the chain (lblk = block hash,
+    // lba = batch hash, lsch = chain hash, lbz = DA blob hash, lsr =
+    // state root, las/lph/lpk = attestation-module ids) but no
+    // explorer routes yet. Recognise them and say so explicitly so a
+    // user pasting one knows it's a known shape, not a typo.
+    if (/^(lblk|lba|lsch|lbz|lsr|las|lph|lpk)1[a-z0-9]+$/.test(v)) {
+      return setErr(
+        `Recognised as a ${v.split('1')[0]}1… identifier, but no explorer route exists yet.`,
+      )
+    }
+    setErr(
+      'Unrecognized. Paste a tx (ltx1… / 0x…), address (lig1…), schema id (lsc1…), or block height.',
+    )
   }
 
   return (
@@ -59,7 +79,7 @@ function SearchBar() {
         <SearchIcon />
         <input
           type="search"
-          placeholder="Search by hash, lig1…, lsc1…, or block height"
+          placeholder="Search by tx (ltx1… / 0x…), address (lig1…), schema (lsc1…), or block height"
           value={val}
           onChange={(e) => {
             setVal(e.target.value)
