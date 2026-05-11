@@ -74,8 +74,8 @@ for (let i = 0; i < 36; i++) {
   const tx_count = 2 + Math.floor(r() * 8)
   BLOCKS.push({
     height,
-    hash: '0x' + hex(64),
-    prev_hash: '0x' + hex(64),
+    hash: 'lblk1' + bech('', 58),
+    prev_hash: 'lblk1' + bech('', 58),
     timestamp: NOW - i * 6000 - Math.floor(r() * 2000),
     tx_count,
     proposer: ADDRESSES[Math.floor(r() * 4)].address,
@@ -128,7 +128,7 @@ for (let i = 0; i < 60; i++) {
               }
 
   TXS.push({
-    hash: '0x' + hex(64),
+    hash: 'ltx1' + bech('', 59),
     height: block.height,
     block_hash: block.hash,
     sender: sender.address,
@@ -245,7 +245,7 @@ for (const s of SCHEMAS) {
 
 const CHAIN_INFO: ChainInfo = {
   chain_id: 'ligate-devnet-1',
-  chain_hash: hex(64),
+  chain_hash: 'lsch1' + bech('', 58),
   version: 'ligate-node v0.4.2-rc.1',
   latest_block: LATEST_HEIGHT,
   tx_per_second: 2.4,
