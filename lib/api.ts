@@ -145,6 +145,23 @@ interface ApiDripResponse {
   drip_amount_lgt: number;
 }
 
+/**
+ * Per-address branch of `GET /v1/drip/status?address=<addr>`.
+ *
+ * Documented in `api/src/handlers.rs::AddressDripStatusResponse`. The
+ * shape happens to match the explorer's `DripStatus` 1-to-1, so no
+ * adapter mapping is needed; we just type the fetch result.
+ *
+ * `next_drip_at` is an RFC3339-millis UTC instant when `can_drip` is
+ * false, and `null` when the address can drip right now. The api
+ * computes the timestamp as `Utc::now() + retry_after` so the
+ * explorer doesn't need server-clock sync.
+ */
+interface ApiAddressDripStatusResponse {
+  can_drip: boolean;
+  next_drip_at: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Adapters — wire shape → explorer UI shape
 // ---------------------------------------------------------------------------
@@ -545,14 +562,23 @@ export async function getAddress(addr: string): Promise<AddressDetail> {
 }
 
 export async function getDripStatus(addr: string): Promise<DripStatus> {
-  // The api's `/v1/drip/status` is a GLOBAL config endpoint
-  // (`drip_amount_nano`, `rate_limit_secs`, `addresses_dripped`), not
-  // a per-address rate-limit state. The explorer's faucet UI expects
-  // per-address `{can_drip, next_drip_at}`. Until the api ships a
-  // per-address endpoint, keep the per-address answer on mock — it
-  // reads as "yes you can drip" which matches reality at a fresh
-  // address.
-  return getMockDripStatus(addr);
+  // Mock mode keeps the deterministic "fresh address can drip"
+  // answer for local development without booting the api. Real mode
+  // calls the per-address branch of `/v1/drip/status` (ligate-api#5,
+  // shipped 2026-05). The wire shape matches `DripStatus` 1-to-1.
+  if (useMockApi) return getMockDripStatus(addr);
+  try {
+    const raw = await fetchJson<ApiAddressDripStatusResponse>(
+      `/v1/drip/status?address=${encodeURIComponent(addr)}`,
+    );
+    return { can_drip: raw.can_drip, next_drip_at: raw.next_drip_at };
+  } catch {
+    // Read failure shouldn't block the faucet UI; default to
+    // "let them try, the POST /v1/drip path enforces the rate
+    // limit canonically anyway". Better UX than a hard-error toast
+    // for a transient api hiccup.
+    return { can_drip: true, next_drip_at: null };
+  }
 }
 
 export async function requestDrip(addr: string): Promise<DripResult> {
