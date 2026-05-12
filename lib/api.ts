@@ -7,6 +7,7 @@ import type {
   ChainInfo,
   DripResult,
   DripStatus,
+  PageResult,
   Schema,
   Tx,
   TxStatus,
@@ -336,10 +337,40 @@ export async function getLatestBlocks(limit = 20): Promise<Block[]> {
 
 export async function getAllBlocks(): Promise<Block[]> {
   if (useMockApi) return mockData.blocks;
-  // `limit=200` keeps the homepage / `/blocks` page on a single page.
-  // True pagination drilling lives in a future cursor-aware page.
+  // Snapshot of the most-recent 100 blocks, used for header stats
+  // (avg-tx / fees / max height) on `/blocks` and `/`. Paginated
+  // drill-down is `getBlocksPage`.
   const raw = await fetchJson<Page<ApiBlockResponse>>("/v1/blocks?limit=100");
   return raw.data.map(adaptBlockResponse);
+}
+
+/**
+ * Cursor-paginated `/blocks` list. Forward-only; the explorer relies
+ * on browser back for "prev", per RFC 0001.
+ *
+ * Mock mode: `cursor` is the decimal stringified start index into
+ * `mockData.blocks`. Real mode: the chain api's opaque `before` value.
+ * The explorer never inspects the cursor; it just round-trips it.
+ */
+export async function getBlocksPage(
+  cursor?: string,
+  limit = 25,
+): Promise<PageResult<Block>> {
+  if (useMockApi) {
+    const start = cursor ? Math.max(0, parseInt(cursor, 10) || 0) : 0;
+    const items = mockData.blocks.slice(start, start + limit);
+    const next = start + limit < mockData.blocks.length
+      ? String(start + limit)
+      : null;
+    return { items, nextCursor: next };
+  }
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (cursor) qs.set("before", cursor);
+  const raw = await fetchJson<Page<ApiBlockResponse>>(`/v1/blocks?${qs}`);
+  return {
+    items: raw.data.map(adaptBlockResponse),
+    nextCursor: raw.pagination.next,
+  };
 }
 
 export async function getBlock(height: number): Promise<Block | null> {
@@ -363,6 +394,59 @@ export async function getAllTxs(): Promise<Tx[]> {
   if (useMockApi) return mockData.txs;
   const raw = await fetchJson<Page<ApiTxResponse>>("/v1/txs?limit=100");
   return raw.data.map(adaptTxResponse);
+}
+
+/**
+ * Cursor-paginated `/txs` list. Optional `kind` narrows by tx kind
+ * (transfer / submit_attestation / register_schema / ...) and survives
+ * pagination via the same `kind` query param baked into the next URL.
+ *
+ * Mock mode honours `kind` against `mockData.txs[*].type` (which uses
+ * the explorer's PascalCase) by mapping it back to the wire kind.
+ */
+export async function getTxsPage(
+  cursor?: string,
+  limit = 25,
+  kind?: string | null,
+): Promise<PageResult<Tx>> {
+  if (useMockApi) {
+    const pool = kind
+      ? mockData.txs.filter((t) => wireKindOf(t.type) === kind)
+      : mockData.txs;
+    const start = cursor ? Math.max(0, parseInt(cursor, 10) || 0) : 0;
+    const items = pool.slice(start, start + limit);
+    const next = start + limit < pool.length ? String(start + limit) : null;
+    return { items, nextCursor: next };
+  }
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (cursor) qs.set("before", cursor);
+  if (kind) qs.set("kind", kind);
+  const raw = await fetchJson<Page<ApiTxResponse>>(`/v1/txs?${qs}`);
+  return {
+    items: raw.data.map(adaptTxResponse),
+    nextCursor: raw.pagination.next,
+  };
+}
+
+/**
+ * Map the explorer's PascalCase `TxType` back to the wire snake_case
+ * `kind`. Used in mock mode so the kind filter behaves like the real
+ * api. `Transfer` covers any unknown wire kind on the way in (see
+ * `kindToTxType`); on the way out, treat it as `transfer` and ignore
+ * the ambiguity for unknown txs (they're filtered out, which is
+ * fine because `Unknown` isn't a user-selectable filter today).
+ */
+function wireKindOf(t: string): string {
+  switch (t) {
+    case "Transfer":
+      return "transfer";
+    case "RegisterSchema":
+      return "register_schema";
+    case "SubmitAttestation":
+      return "submit_attestation";
+    default:
+      return t.toLowerCase();
+  }
 }
 
 export async function getTx(hash: string): Promise<Tx | null> {

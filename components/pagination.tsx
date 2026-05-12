@@ -1,37 +1,40 @@
-// Server-rendered pagination using URL query params (?page=N).
-// Each list page passes its own basePath plus any extra query params
-// to preserve (e.g. filter type).
+'use client'
+
+// Cursor-paginated nav for list pages. URL state is `?cursor=<opaque>`
+// (omitted on page 1); `extraParams` is passed through so filters
+// survive paging. Forward-only by design: "prev" uses browser back per
+// RFC 0001 (cursors are opaque so we don't synthesise a previous one
+// in the URL).
 
 import Link from 'next/link'
 
 export function Pagination({
   basePath,
-  page,
-  perPage,
-  total,
+  cursor,
+  nextCursor,
+  itemsOnPage,
   extraParams = {},
 }: {
   basePath: string
-  page: number
-  perPage: number
-  total: number
+  /** Current page's cursor; undefined / null on the first page. */
+  cursor?: string | null
+  /** Next page's cursor, or null when this is the last page. */
+  nextCursor: string | null
+  /** Items rendered on the current page, used in the "Showing N items" footer. */
+  itemsOnPage: number
   extraParams?: Record<string, string | undefined>
 }) {
-  const totalPages = Math.max(1, Math.ceil(total / perPage))
-  const prevDisabled = page <= 1
-  const nextDisabled = page >= totalPages
-  const start = (page - 1) * perPage + 1
-  const end = Math.min(page * perPage, total)
-
-  const buildHref = (p: number) => {
+  const buildHref = (c: string) => {
     const params = new URLSearchParams()
     for (const [k, v] of Object.entries(extraParams)) {
       if (v) params.set(k, v)
     }
-    if (p > 1) params.set('page', String(p))
-    const qs = params.toString()
-    return qs ? `${basePath}?${qs}` : basePath
+    params.set('cursor', c)
+    return `${basePath}?${params.toString()}`
   }
+
+  const onFirstPage = !cursor
+  const noMorePages = nextCursor === null
 
   return (
     <div
@@ -51,10 +54,10 @@ export function Pagination({
           color: 'var(--color-subtle)',
         }}
       >
-        Showing {start}–{end} of {total}
+        Showing {itemsOnPage} {itemsOnPage === 1 ? 'item' : 'items'}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        {prevDisabled ? (
+        {onFirstPage ? (
           <span
             className="btn"
             style={{ padding: '8px 14px', fontSize: 10, opacity: 0.4 }}
@@ -62,27 +65,27 @@ export function Pagination({
             ← prev
           </span>
         ) : (
-          <Link
-            href={buildHref(page - 1)}
+          // Browser back rather than a server-routable URL: cursors are
+          // opaque, so we don't synthesise a previous one. Users hitting
+          // forward after back keep the new cursor in history.
+          <button
+            type="button"
+            onClick={() => window.history.back()}
             className="btn"
-            style={{ padding: '8px 14px', fontSize: 10 }}
+            style={{
+              padding: '8px 14px',
+              fontSize: 10,
+              cursor: 'pointer',
+              background: 'transparent',
+              border: '1px solid var(--color-line-2)',
+              color: 'var(--color-ink)',
+              fontFamily: 'var(--font-mono)',
+            }}
           >
             ← prev
-          </Link>
+          </button>
         )}
-        <span
-          className="mono"
-          style={{
-            padding: '8px 14px',
-            fontSize: 11,
-            letterSpacing: '0.18em',
-            color: 'var(--color-bone)',
-            border: '1px solid var(--color-line-2)',
-          }}
-        >
-          {page} / {totalPages}
-        </span>
-        {nextDisabled ? (
+        {noMorePages ? (
           <span
             className="btn"
             style={{ padding: '8px 14px', fontSize: 10, opacity: 0.4 }}
@@ -91,7 +94,7 @@ export function Pagination({
           </span>
         ) : (
           <Link
-            href={buildHref(page + 1)}
+            href={buildHref(nextCursor!)}
             className="btn"
             style={{ padding: '8px 14px', fontSize: 10 }}
           >
