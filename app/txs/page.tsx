@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { getAllTxs } from '@/lib/api'
+import { getAllTxs, getTxsPage } from '@/lib/api'
 import type { TxType } from '@/lib/api-types'
 import { TxsTable } from '@/components/tables'
 import { Eyebrow, FrameCard } from '@/components/ui'
@@ -19,20 +19,48 @@ const TYPES: ('All' | TxType)[] = [
   'SubmitProof',
 ]
 
+/**
+ * Map PascalCase `TxType` (URL surface) to the wire snake_case `kind`
+ * that ligate-api accepts on the `?kind=` query param. Kept narrow:
+ * unknown filter values fall through to `null` (no filter) rather
+ * than 400ing the api with garbage.
+ */
+function pascalToWireKind(t: 'All' | TxType): string | null {
+  switch (t) {
+    case 'All':
+      return null
+    case 'SubmitAttestation':
+      return 'submit_attestation'
+    case 'RegisterSchema':
+      return 'register_schema'
+    case 'Transfer':
+      return 'transfer'
+    case 'BondSequencer':
+      return 'bond_sequencer'
+    case 'SubmitProof':
+      return 'submit_proof'
+  }
+}
+
 export default async function TxsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; type?: string }>
+  searchParams: Promise<{ cursor?: string; type?: string }>
 }) {
   const params = await searchParams
-  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1)
+  const cursor = params.cursor
   const filter = (TYPES as string[]).includes(params.type ?? 'All')
     ? ((params.type ?? 'All') as 'All' | TxType)
     : 'All'
 
-  const all = await getAllTxs()
+  // 100-tx snapshot for header stats + filter counts. Paged drill-down
+  // table is its own cursor-aware fetch.
+  const [all, pageResult] = await Promise.all([
+    getAllTxs(),
+    getTxsPage(cursor, PER_PAGE, pascalToWireKind(filter)),
+  ])
   const filtered = filter === 'All' ? all : all.filter((t) => t.type === filter)
-  const rows = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+  const rows = pageResult.items
 
   const counts = {
     SubmitAttestation: all.filter((t) => t.type === 'SubmitAttestation').length,
@@ -177,9 +205,9 @@ export default async function TxsPage({
 
       <Pagination
         basePath="/txs"
-        page={page}
-        perPage={PER_PAGE}
-        total={filtered.length}
+        cursor={cursor}
+        nextCursor={pageResult.nextCursor}
+        itemsOnPage={rows.length}
         extraParams={{ type: filter !== 'All' ? filter : undefined }}
       />
     </>

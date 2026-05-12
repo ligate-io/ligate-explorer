@@ -1,6 +1,17 @@
 // Wire types for the explorer's API client. Mirrors the contract
 // in lib/api.ts and the mock fixtures in lib/mock.ts.
 
+/**
+ * Cursor-paginated list result. `nextCursor` is opaque to the client
+ * (server-encoded); pass it back as the `cursor` arg to the next call,
+ * or `null` to indicate this was the last page. Mirrors ligate-api's
+ * `Page<T>` envelope (RFC 0001), translated to UI-friendly camelCase.
+ */
+export interface PageResult<T> {
+  items: T[]
+  nextCursor: string | null
+}
+
 export type TxType =
   | 'SubmitAttestation'
   | 'RegisterSchema'

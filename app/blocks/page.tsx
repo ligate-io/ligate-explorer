@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { getAllBlocks } from '@/lib/api'
+import { getAllBlocks, getBlocksPage } from '@/lib/api'
 import { fmtLgt } from '@/lib/format'
 import { BlocksTable } from '@/components/tables'
 import { BlockSpark } from '@/components/svgs'
@@ -9,17 +9,24 @@ import { Pagination } from '@/components/pagination'
 export const metadata: Metadata = { title: 'Blocks' }
 export const dynamic = 'force-dynamic'
 
-const PER_PAGE = 20
+const PER_PAGE = 25
 
 export default async function BlocksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ cursor?: string }>
 }) {
   const params = await searchParams
-  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1)
+  const cursor = params.cursor
 
-  const all = await getAllBlocks()
+  // Two reads: a 100-block snapshot for header stats (avg txs, fees,
+  // max height) and a cursor-paginated page for the table. Keeps the
+  // header stable across paging and stops us from needing a separate
+  // /v1/blocks/stats endpoint pre-devnet.
+  const [all, pageResult] = await Promise.all([
+    getAllBlocks(),
+    getBlocksPage(cursor, PER_PAGE),
+  ])
   const totalTxs = all.reduce((acc, b) => acc + b.tx_count, 0)
   const avgTxs = (totalTxs / all.length).toFixed(2)
   const totalFees = all.reduce(
@@ -27,7 +34,7 @@ export default async function BlocksPage({
     0n
   )
 
-  const rows = all.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+  const rows = pageResult.items
 
   const stats = [
     { label: 'Latest block', value: '#' + all[0].height },
@@ -143,9 +150,9 @@ export default async function BlocksPage({
 
       <Pagination
         basePath="/blocks"
-        page={page}
-        perPage={PER_PAGE}
-        total={all.length}
+        cursor={cursor}
+        nextCursor={pageResult.nextCursor}
+        itemsOnPage={rows.length}
       />
     </>
   )
