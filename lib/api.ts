@@ -93,6 +93,37 @@ interface ApiTxResponse {
   revert_reason: string | null;
 }
 
+/** RFC 0002 `Schema` body. */
+interface ApiSchemaResponse {
+  id: string;
+  name: string;
+  version: number;
+  owner: string;
+  attestor_set_id: string;
+  fee_routing_bps: number;
+  fee_routing_addr: string | null;
+  payload_shape_hash: string;
+  registered_at: {
+    block_height: number;
+    tx_hash: string;
+    timestamp: string;
+  };
+  attestation_count: number;
+}
+
+/** RFC 0002 `AttestorSet` body. */
+interface ApiAttestorSetResponse {
+  id: string;
+  members: string[];
+  threshold: number;
+  registered_at: {
+    block_height: number;
+    tx_hash: string;
+    timestamp: string;
+  };
+  schema_count: number;
+}
+
 /** RFC 0002 `AddressSummary` body. */
 interface ApiAddressSummaryResponse {
   address: string;
@@ -353,20 +384,72 @@ export async function getTxsForBlock(height: number): Promise<Tx[]> {
   return raw.data.filter((t) => t.block_height === height).map(adaptTxResponse);
 }
 
+/**
+ * Adapt RFC 0002 `Schema` body → explorer `Schema` shape.
+ *
+ * Chain-side gaps surfaced as defaults:
+ *
+ * - `threshold` is on the bound `AttestorSet`, not the `Schema`.
+ *   Resolving per-row in a list view requires N extra roundtrips;
+ *   `getSchemas` emits the placeholder `"0 of 0"` so the UI's
+ *   `s.threshold.split(' of ')` destructure works without crashing.
+ *   `getSchema` does the extra `/v1/attestor-sets/{id}` call to fill
+ *   the real `"M of N"` for detail views.
+ * - `description` isn't carried on-chain. Empty string.
+ * - `recent_attestations` would need a `/v1/schemas/{id}/attestations`
+ *   endpoint (not shipped on the api yet). Empty array.
+ */
+function adaptSchemaResponse(
+  r: ApiSchemaResponse,
+  threshold: string = "0 of 0",
+): Schema {
+  return {
+    schema_id: r.id,
+    name: r.name,
+    version: r.version,
+    owner: r.owner,
+    attestor_set_id: r.attestor_set_id,
+    threshold,
+    fee_routing_bps: r.fee_routing_bps,
+    fee_routing_addr: r.fee_routing_addr ?? "",
+    payload_shape_hash: r.payload_shape_hash,
+    description: "",
+    attestation_count: r.attestation_count,
+    recent_attestations: [],
+  };
+}
+
 export async function getSchemas(): Promise<Schema[]> {
-  // `/v1/schemas` is still 501 on the api (Phase E, blocked on
-  // ligate-chain#295). Surface the empty mock list as `[]` against
-  // a live api so the page renders without crashing.
   if (useMockApi) return mockData.schemas;
-  return [];
+  const raw = await fetchJson<Page<ApiSchemaResponse>>("/v1/schemas?limit=100");
+  return raw.data.map((s) => adaptSchemaResponse(s));
 }
 
 export async function getSchema(id: string): Promise<Schema | null> {
   if (useMockApi)
     return mockData.schemas.find((s) => s.schema_id === id) ?? null;
-  // Same blocker as `getSchemas`. Returns null so the page 404s
-  // gracefully.
-  return null;
+  let raw: ApiSchemaResponse;
+  try {
+    raw = await fetchJson<ApiSchemaResponse>(`/v1/schemas/${id}`);
+  } catch {
+    return null;
+  }
+  // Resolve the real threshold by fetching the bound attestor set.
+  // List view skips this extra hop; detail view does the second
+  // roundtrip so the schema page renders `"M of N"` honestly.
+  let threshold = "0 of 0";
+  try {
+    const set = await fetchJson<ApiAttestorSetResponse>(
+      `/v1/attestor-sets/${raw.attestor_set_id}`,
+    );
+    threshold = `${set.threshold} of ${set.members.length}`;
+  } catch {
+    // Lookup failure leaves the placeholder. The chain guarantees a
+    // registered schema binds to a registered set; the only way this
+    // fails is a transient api hiccup, which doesn't warrant 502'ing
+    // the schema page.
+  }
+  return adaptSchemaResponse(raw, threshold);
 }
 
 export async function getAddress(addr: string): Promise<AddressDetail> {
