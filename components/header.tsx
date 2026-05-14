@@ -10,6 +10,7 @@ const TABS = [
   { id: 'home', label: 'Home', href: '/' },
   { id: 'blocks', label: 'Blocks', href: '/blocks' },
   { id: 'txs', label: 'Txs', href: '/txs' },
+  { id: 'attestations', label: 'Attestations', href: '/attestations' },
   { id: 'schemas', label: 'Schemas', href: '/schemas' },
   { id: 'faucet', label: 'Faucet', href: '/faucet' },
   { id: 'info', label: 'Info', href: '/info' },
@@ -20,6 +21,12 @@ function activeTab(pathname: string): string | null {
   if (pathname.startsWith('/blocks') || pathname.startsWith('/block/'))
     return 'blocks'
   if (pathname.startsWith('/txs') || pathname.startsWith('/tx/')) return 'txs'
+  if (
+    pathname.startsWith('/attestations') ||
+    pathname.startsWith('/attestation/') ||
+    pathname.startsWith('/attestor-set')
+  )
+    return 'attestations'
   if (pathname.startsWith('/schemas') || pathname.startsWith('/schema/'))
     return 'schemas'
   if (pathname.startsWith('/faucet')) return 'faucet'
