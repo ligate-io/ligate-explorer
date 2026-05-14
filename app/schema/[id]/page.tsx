@@ -147,7 +147,14 @@ export default async function SchemaPage({
                 },
                 {
                   label: 'Attestor set',
-                  value: <span className="link">{s.attestor_set_id}</span>,
+                  value: (
+                    <Link
+                      href={`/attestor-set/${s.attestor_set_id}`}
+                      className="link"
+                    >
+                      {s.attestor_set_id}
+                    </Link>
+                  ),
                 },
                 {
                   label: 'Threshold',

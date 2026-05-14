@@ -3,6 +3,8 @@ import "server-only";
 import { getMockAddressDetail, getMockDripStatus, mockData } from "./mock";
 import type {
   AddressDetail,
+  Attestation,
+  AttestorSet,
   Block,
   ChainInfo,
   DripResult,
@@ -551,6 +553,56 @@ export async function getSchema(id: string): Promise<Schema | null> {
     // the schema page.
   }
   return adaptSchemaResponse(raw, threshold);
+}
+
+// ---------------------------------------------------------------------
+// Attestations + attestor sets
+//
+// Mock-backed today. The real endpoints (`/v1/attestations`,
+// `/v1/attestations/{id}`, `/v1/attestor-sets/{id}`) flip per-endpoint
+// behind `USE_MOCK_API` as `ligate-api` ships them — see
+// ligate-io/ligate-explorer#8. `/v1/attestor-sets/{id}` already exists
+// (`getSchema` calls it); the attestation list + detail endpoints are
+// the api-side follow-up. Wire shapes confirmed against the chain's
+// REST surface land here when the real branch is enabled.
+// ---------------------------------------------------------------------
+
+export async function getAttestations(): Promise<Attestation[]> {
+  if (useMockApi) return mockData.attestations;
+  const raw = await fetchJson<Page<Attestation>>("/v1/attestations?limit=100");
+  return raw.data;
+}
+
+export async function getAttestation(id: string): Promise<Attestation | null> {
+  if (useMockApi)
+    return (
+      mockData.attestations.find((a) => a.attestation_id === id) ?? null
+    );
+  try {
+    return await fetchJson<Attestation>(`/v1/attestations/${id}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function getAttestorSets(): Promise<AttestorSet[]> {
+  if (useMockApi) return mockData.attestorSets;
+  const raw = await fetchJson<Page<AttestorSet>>(
+    "/v1/attestor-sets?limit=100",
+  );
+  return raw.data;
+}
+
+export async function getAttestorSet(id: string): Promise<AttestorSet | null> {
+  if (useMockApi)
+    return (
+      mockData.attestorSets.find((s) => s.attestor_set_id === id) ?? null
+    );
+  try {
+    return await fetchJson<AttestorSet>(`/v1/attestor-sets/${id}`);
+  } catch {
+    return null;
+  }
 }
 
 export async function getAddress(addr: string): Promise<AddressDetail> {

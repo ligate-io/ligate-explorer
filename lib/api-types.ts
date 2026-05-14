@@ -82,6 +82,35 @@ export interface Schema {
   recent_attestations: SchemaAttestation[]
 }
 
+// A single attestation: the chain's core object. Identified by a
+// `lat1…` id; binds a payload hash to the schema it was submitted
+// under and the attestor set whose threshold signed it.
+export interface Attestation {
+  attestation_id: string
+  schema_id: string
+  schema_name: string
+  attestor_set_id: string
+  submitter: string
+  payload_hash: string
+  signature_count: number
+  threshold: string
+  block_height: number
+  tx_hash: string
+  timestamp: number
+}
+
+// A registered attestor set: `las1…` id, the member pubkeys, the
+// signing threshold, and the schemas bound to it.
+export interface AttestorSet {
+  attestor_set_id: string
+  members: string[]
+  threshold: number
+  schema_count: number
+  attestation_count: number
+  registered_block: number
+  bound_schemas: { schema_id: string; name: string; version: number }[]
+}
+
 export interface ChainInfo {
   chain_id: string
   chain_hash: string

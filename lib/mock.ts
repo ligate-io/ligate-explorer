@@ -10,6 +10,8 @@ import 'server-only'
 import type {
   Address,
   AddressDetail,
+  Attestation,
+  AttestorSet,
   Block,
   ChainInfo,
   DripStatus,
@@ -243,6 +245,65 @@ for (const s of SCHEMAS) {
   }
 }
 
+// Attestor sets. Each `las1…` set is the quorum of pubkeys behind one
+// or more schemas. SCHEMAS reference legacy placeholder ids; map each
+// to a real `las1…` id, re-point the schemas, then build the sets.
+const ATTESTOR_SET_SEEDS = [
+  { legacyId: 'attset_2of3_v1', threshold: 2, members: 3 },
+  { legacyId: 'attset_3of5_v0', threshold: 3, members: 5 },
+  { legacyId: 'attset_1of1_v0', threshold: 1, members: 1 },
+] as const
+
+const ATTESTOR_SET_ID_MAP = new Map<string, string>(
+  ATTESTOR_SET_SEEDS.map((s) => [s.legacyId, 'las1' + bech('', 36)]),
+)
+
+for (const s of SCHEMAS) {
+  const real = ATTESTOR_SET_ID_MAP.get(s.attestor_set_id)
+  if (real) s.attestor_set_id = real
+}
+
+const ATTESTOR_SETS: AttestorSet[] = ATTESTOR_SET_SEEDS.map((seed) => {
+  const id = ATTESTOR_SET_ID_MAP.get(seed.legacyId) as string
+  const bound = SCHEMAS.filter((s) => s.attestor_set_id === id)
+  return {
+    attestor_set_id: id,
+    members: Array.from(
+      { length: seed.members },
+      () => 'lpk1' + bech('', 38),
+    ),
+    threshold: seed.threshold,
+    schema_count: bound.length,
+    attestation_count: bound.reduce((n, s) => n + s.attestation_count, 0),
+    registered_block: LATEST_HEIGHT - 4000 - Math.floor(r() * 2000),
+    bound_schemas: bound.map((s) => ({
+      schema_id: s.schema_id,
+      name: s.name,
+      version: s.version,
+    })),
+  }
+})
+
+// Attestations. Flatten every schema's recent attestations into
+// standalone `lat1…` records (the chain's core object) so the
+// `/attestations` list and `/attestation/[id]` detail have real data.
+const ATTESTATIONS: Attestation[] = SCHEMAS.flatMap((s) => {
+  const set = ATTESTOR_SETS.find((a) => a.attestor_set_id === s.attestor_set_id)
+  return s.recent_attestations.map((a) => ({
+    attestation_id: 'lat1' + bech('', 50),
+    schema_id: s.schema_id,
+    schema_name: s.name,
+    attestor_set_id: s.attestor_set_id,
+    submitter: a.submitter,
+    payload_hash: a.payload_hash,
+    signature_count: set ? set.threshold : 1,
+    threshold: s.threshold,
+    block_height: a.block_height,
+    tx_hash: 'ltx1' + bech('', 56),
+    timestamp: a.timestamp,
+  }))
+}).sort((a, b) => b.timestamp - a.timestamp)
+
 const CHAIN_INFO: ChainInfo = {
   chain_id: 'ligate-devnet-1',
   chain_hash: 'lsch1' + bech('', 58),
@@ -261,6 +322,8 @@ export const mockData = {
   blocks: BLOCKS,
   txs: TXS,
   schemas: SCHEMAS,
+  attestorSets: ATTESTOR_SETS,
+  attestations: ATTESTATIONS,
   addresses: ADDRESSES,
   info: CHAIN_INFO,
 }
