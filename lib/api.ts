@@ -569,8 +569,18 @@ export async function getSchema(id: string): Promise<Schema | null> {
 
 export async function getAttestations(): Promise<Attestation[]> {
   if (useMockApi) return mockData.attestations;
-  const raw = await fetchJson<Page<Attestation>>("/v1/attestations?limit=100");
-  return raw.data;
+  // List endpoint isn't shipped on ligate-api yet (point lookups only).
+  // Catch the 404 / network error and degrade to an empty list so the
+  // page renders its empty state instead of 500'ing. Tracked under
+  // ligate-io/ligate-explorer#8 (USE_MOCK_API flip checklist).
+  try {
+    const raw = await fetchJson<Page<Attestation>>(
+      "/v1/attestations?limit=100",
+    );
+    return raw.data;
+  } catch {
+    return [];
+  }
 }
 
 export async function getAttestation(id: string): Promise<Attestation | null> {
@@ -587,10 +597,18 @@ export async function getAttestation(id: string): Promise<Attestation | null> {
 
 export async function getAttestorSets(): Promise<AttestorSet[]> {
   if (useMockApi) return mockData.attestorSets;
-  const raw = await fetchJson<Page<AttestorSet>>(
-    "/v1/attestor-sets?limit=100",
-  );
-  return raw.data;
+  // Same story as getAttestations: list endpoint isn't shipped yet
+  // (only `/v1/attestor-sets/{id}` point lookups exist, which `getSchema`
+  // uses to resolve the threshold). Degrade to empty so the list page
+  // renders its empty state.
+  try {
+    const raw = await fetchJson<Page<AttestorSet>>(
+      "/v1/attestor-sets?limit=100",
+    );
+    return raw.data;
+  } catch {
+    return [];
+  }
 }
 
 export async function getAttestorSet(id: string): Promise<AttestorSet | null> {
