@@ -1,6 +1,6 @@
 # ligate-explorer
 
-[![CI](https://github.com/ligate-io/ligate-explorer/actions/workflows/ci.yml/badge.svg)](https://github.com/ligate-io/ligate-explorer/actions/workflows/ci.yml) [![License: Apache-2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0_OR_MIT-blue.svg)](#license) [![Chain](https://img.shields.io/badge/chain-ligate--devnet--1-A7D28C.svg)](https://github.com/ligate-io/ligate-chain) [![Docs](https://img.shields.io/badge/docs-docs.ligate.io-A7D28C.svg)](https://docs.ligate.io) [![Pre-devnet](https://img.shields.io/badge/status-pre--devnet-E8833A.svg)](#status)
+[![CI](https://github.com/ligate-io/ligate-explorer/actions/workflows/ci.yml/badge.svg)](https://github.com/ligate-io/ligate-explorer/actions/workflows/ci.yml) [![License: Apache-2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0_OR_MIT-blue.svg)](#license) [![Chain](https://img.shields.io/badge/chain-ligate--devnet--1-A7D28C.svg)](https://github.com/ligate-io/ligate-chain) [![Docs](https://img.shields.io/badge/docs-docs.ligate.io-A7D28C.svg)](https://docs.ligate.io) [![Devnet](https://img.shields.io/badge/status-devnet-A7D28C.svg)](#status)
 
 Block explorer frontend for [Ligate Chain](https://github.com/ligate-io/ligate-chain). Blocks, transactions, schemas, attestor sets, and attestations: live state of devnet at [`explorer.ligate.io`](https://explorer.ligate.io).
 
@@ -18,7 +18,7 @@ By default the dev server reads from typed mock fixtures (every route renders wi
 
 ## Status
 
-**Pre-devnet.** This repo is the Next.js frontend only — the Rust indexer + Postgres surface lives in [`ligate-io/ligate-api`](https://github.com/ligate-io/ligate-api). Tracking issue: [`ligate-chain#80`](https://github.com/ligate-io/ligate-chain/issues/80).
+**Devnet.** This repo is the Next.js frontend only — the Rust indexer + Postgres surface lives in [`ligate-io/ligate-api`](https://github.com/ligate-io/ligate-api).
 
 `ligate-devnet-1` is targeted for **Q2 2026**.
 
