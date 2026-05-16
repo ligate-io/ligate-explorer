@@ -159,6 +159,8 @@ function SkelTable({
 // Homepage row-3 / row-4 pattern: eyebrow + "View all →" ABOVE a
 // FrameCard with a compact table inside. Used twice in each row so
 // the two cards share heights via the parent grid's alignItems:stretch.
+// `scrollX` matches the live cards so the skeleton silhouette stays
+// identical on mobile (no layout shift on data swap-in).
 export function SkelHomeTableCard({
   eyebrowWidth = 90,
   headers,
@@ -171,7 +173,7 @@ export function SkelHomeTableCard({
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       <SkelEyebrowRow width={eyebrowWidth} />
-      <FrameCard padding={0} style={{ flex: 1 }}>
+      <FrameCard padding={0} style={{ flex: 1 }} scrollX>
         <SkelTable headers={headers} rows={rows} compact />
       </FrameCard>
     </div>
@@ -189,7 +191,7 @@ export function SkelListTableCard({
   rows?: number
 }) {
   return (
-    <FrameCard padding={0}>
+    <FrameCard padding={0} scrollX>
       <SkelTable headers={headers} rows={rows} />
     </FrameCard>
   )

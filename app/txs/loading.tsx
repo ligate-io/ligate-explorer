@@ -17,12 +17,8 @@ export default function Loading() {
       </div>
 
       <div
-        style={{
-          marginTop: 40,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 0,
-        }}
+        className="grid-stats-4"
+        style={{ marginTop: 40, gap: 0 }}
       >
         {Array.from({ length: 4 }).map((_, i) => (
           <FrameCard

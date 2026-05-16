@@ -84,10 +84,9 @@ export default async function BlocksPage({
       <div style={{ paddingTop: 16 }}>
         <Eyebrow>Blocks</Eyebrow>
         <h1
-          className="serif"
+          className="serif h-hero"
           style={{
             marginTop: 24,
-            fontSize: 72,
             lineHeight: 0.95,
             color: 'var(--color-ink)',
             maxWidth: '20ch',
@@ -108,12 +107,8 @@ export default async function BlocksPage({
       </div>
 
       <div
-        style={{
-          marginTop: 40,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 0,
-        }}
+        className="grid-stats-4"
+        style={{ marginTop: 40, gap: 0 }}
       >
         {stats.map((t, i) => {
           const hasSub = 'sub' in t && t.sub
@@ -196,7 +191,7 @@ export default async function BlocksPage({
         <BlockSpark blocks={all.map((b) => ({ tx_count: b.tx_count }))} />
       </div>
 
-      <FrameCard padding={0} style={{ marginTop: 24 }}>
+      <FrameCard padding={0} style={{ marginTop: 24 }} scrollX>
         <BlocksTable rows={rows} />
       </FrameCard>
 

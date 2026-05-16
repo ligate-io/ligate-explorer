@@ -9,8 +9,10 @@ export function Footer() {
         background: 'var(--color-bg)',
       }}
     >
+      {/* `footer-inner` flips to a stacked column under 768px so the
+          three blocks (© line / link strip / chain id) don't squish. */}
       <div
-        className="page-wrap"
+        className="page-wrap footer-inner"
         style={{
           display: 'flex',
           justifyContent: 'space-between',

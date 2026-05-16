@@ -236,20 +236,75 @@ function SearchBar() {
   )
 }
 
+// Hamburger icons drawn inline so we avoid an extra svg-file import
+// and they share the parent's currentColor.
+function HamburgerIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M3 3 L13 13 M13 3 L3 13"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  ) : (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M2 4 H14 M2 8 H14 M2 12 H14"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 export function Header() {
   const pathname = usePathname()
   const active = activeTab(pathname)
+  // Drawer state lives at the Header level so the close handler can
+  // also be wired into the route-change effect below.
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  // Auto-close the drawer whenever the user navigates. Without this,
+  // clicking a link opens the new route but leaves the drawer pinned
+  // open over the new content.
+  useEffect(() => {
+    setDrawerOpen(false)
+  }, [pathname])
+  // Body-scroll lock while drawer is open — the CSS rule in
+  // globals.css keys off this attribute on <html>. Closing the drawer
+  // (or navigating) clears it.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (drawerOpen) {
+      document.documentElement.setAttribute('data-drawer-open', 'true')
+    } else {
+      document.documentElement.removeAttribute('data-drawer-open')
+    }
+    return () => {
+      document.documentElement.removeAttribute('data-drawer-open')
+    }
+  }, [drawerOpen])
   return (
     <header
       style={{
         borderBottom: '1px solid var(--color-line)',
         background: 'var(--color-bg)',
-        position: 'relative',
-        zIndex: 10,
+        // Sticky so the navbar follows the user as they scroll. The
+        // z-index sits above the drawer fallback (z:50) and the page
+        // content. `top: 0` pins it to the viewport top edge.
+        position: 'sticky',
+        top: 0,
+        zIndex: 60,
       }}
     >
+      {/* `header-inner` + `header-nav` classes carry the mobile rules
+          from globals.css. On desktop, .hamburger is display:none and
+          .header-nav shows. On ≤1024px, .hamburger shows and
+          .header-nav hides — the drawer below takes over. */}
       <div
-        className="page-wrap"
+        className="page-wrap header-inner"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -258,10 +313,19 @@ export function Header() {
         }}
       >
         <Wordmark />
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+        {/* `search-cell` lets the responsive layer push this to a
+            full-width second row on mobile (under the logo +
+            hamburger). Desktop keeps it centered between them. */}
+        <div
+          className="search-cell"
+          style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
+        >
           <SearchBar />
         </div>
-        <nav style={{ display: 'flex', gap: 28, flexShrink: 0 }}>
+        <nav
+          className="header-nav"
+          style={{ display: 'flex', gap: 28, flexShrink: 0 }}
+        >
           {TABS.map((t) => (
             <Link
               key={t.id}
@@ -272,7 +336,29 @@ export function Header() {
             </Link>
           ))}
         </nav>
+        <button
+          type="button"
+          className="hamburger"
+          aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={drawerOpen}
+          onClick={() => setDrawerOpen((v) => !v)}
+        >
+          <HamburgerIcon open={drawerOpen} />
+        </button>
       </div>
+      {drawerOpen ? (
+        <div className="mobile-drawer" role="navigation">
+          {TABS.map((t) => (
+            <Link
+              key={t.id}
+              href={t.href}
+              className={`nav-link ${active === t.id ? 'active' : ''}`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
     </header>
   )
 }

@@ -91,6 +91,7 @@ export function FaucetForm() {
           ) : null}
 
           <div
+            className="faucet-actions"
             style={{
               marginTop: 24,
               display: 'flex',

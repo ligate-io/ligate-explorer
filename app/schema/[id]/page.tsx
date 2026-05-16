@@ -60,6 +60,7 @@ export default async function SchemaPage({
       <Eyebrow>Schema</Eyebrow>
 
       <div
+        className="detail-grid-2"
         style={{
           marginTop: 20,
           display: 'grid',
@@ -70,9 +71,8 @@ export default async function SchemaPage({
       >
         <div>
           <h1
-            className="serif"
+            className="serif h-hero"
             style={{
-              fontSize: 64,
               lineHeight: 1,
               color: 'var(--color-ink)',
               margin: 0,
@@ -134,6 +134,7 @@ export default async function SchemaPage({
       </div>
 
       <div
+        className="detail-grid-2"
         style={{
           marginTop: 48,
           display: 'grid',
@@ -245,7 +246,7 @@ export default async function SchemaPage({
             </Link>
           ) : null}
         </div>
-        <FrameCard padding={0}>
+        <FrameCard padding={0} scrollX>
           <table className="tbl">
             <thead>
               <tr>

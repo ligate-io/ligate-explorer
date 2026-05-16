@@ -1,42 +1,30 @@
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
-import {
-  Instrument_Serif,
-  JetBrains_Mono,
-  Space_Grotesk,
-} from 'next/font/google'
+
+// Static, fully self-hosted fonts via @fontsource. Each import
+// bundles the woff2 files into the build and injects `@font-face`
+// rules pointing at them. No googleapis.com, no gstatic.com, no
+// runtime font fetch — bytes ship with the JS bundle and are cached
+// like any other static asset.
+//
+// (Was on next/font/google which DID self-host at build time, but
+// the user wanted hard guarantees that the font setup couldn't be
+// the source of any flash. @fontsource keeps everything in
+// node_modules — easier to reason about, easier to audit.)
+import '@fontsource/instrument-serif/400.css'
+import '@fontsource/instrument-serif/400-italic.css'
+import '@fontsource/space-grotesk/300.css'
+import '@fontsource/space-grotesk/400.css'
+import '@fontsource/space-grotesk/500.css'
+import '@fontsource/space-grotesk/600.css'
+import '@fontsource/jetbrains-mono/300.css'
+import '@fontsource/jetbrains-mono/400.css'
+import '@fontsource/jetbrains-mono/500.css'
+import '@fontsource/jetbrains-mono/600.css'
 import './globals.css'
 
 import { Footer } from '@/components/footer'
 import { Header } from '@/components/header'
-
-// Self-host the three brand faces via next/font/google. Build-time
-// inlines the font CSS + serves the woff2 from `/_next/static/media/`
-// (same origin), eliminating the two DNS + two TLS handshakes the
-// previous `<link>` to fonts.googleapis.com cost on every cold load.
-// Exposed as CSS variables so globals.css can keep its --font-*
-// references unchanged.
-const serif = Instrument_Serif({
-  weight: '400',
-  style: ['normal', 'italic'],
-  subsets: ['latin'],
-  variable: '--font-serif-next',
-  display: 'swap',
-})
-
-const sans = Space_Grotesk({
-  weight: ['300', '400', '500', '600'],
-  subsets: ['latin'],
-  variable: '--font-sans-next',
-  display: 'swap',
-})
-
-const mono = JetBrains_Mono({
-  weight: ['300', '400', '500', '600'],
-  subsets: ['latin'],
-  variable: '--font-mono-next',
-  display: 'swap',
-})
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://explorer.ligate.io'),
@@ -69,10 +57,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html
-      lang="en"
-      className={`${serif.variable} ${sans.variable} ${mono.variable}`}
-    >
+    <html lang="en">
       <body
         className="grain"
         style={{

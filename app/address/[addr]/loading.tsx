@@ -33,12 +33,8 @@ export default function Loading() {
       </div>
 
       <div
-        style={{
-          marginTop: 32,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 0,
-        }}
+        className="grid-stats-3"
+        style={{ marginTop: 32, gap: 0 }}
       >
         {Array.from({ length: 3 }).map((_, i) => (
           <FrameCard

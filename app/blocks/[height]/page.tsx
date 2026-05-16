@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getBlock, getTxsForBlock } from '@/lib/api'
+import { getBlock, getInfo, getTxsForBlock } from '@/lib/api'
 import { ago, fmtLgt, isoDate, trunc } from '@/lib/format'
 import { CopyButton } from '@/components/copy-button'
 import { TxsTable } from '@/components/tables'
@@ -27,9 +27,19 @@ export default async function BlockPage({
   const height = parseInt(heightStr, 10)
   if (!Number.isFinite(height)) notFound()
 
-  const block = await getBlock(height)
+  // Cross-fetch info so we know the chain head — used to disable the
+  // "next →" button when we're already at the latest block. Both
+  // calls are in flight together; getInfo is cached for 5s api-side
+  // so cost is near-zero on cache hit.
+  const [block, blockTxs, info] = await Promise.all([
+    getBlock(height),
+    getTxsForBlock(height),
+    getInfo().catch(() => null),
+  ])
   if (!block) notFound()
-  const blockTxs = await getTxsForBlock(height)
+  const latestHeight = info?.latest_block ?? height
+  const atGenesis = height <= 1
+  const atHead = height >= latestHeight
 
   // Slot-level fees aren't on the wire (the api adapter ships "0").
   // Sum gas + protocol across the block's txs to get an honest total.
@@ -93,9 +103,8 @@ export default async function BlockPage({
         }}
       >
         <h1
-          className="serif"
+          className="serif h-detail-xl"
           style={{
-            fontSize: 96,
             lineHeight: 0.9,
             color: 'var(--color-ink)',
             margin: 0,
@@ -113,16 +122,47 @@ export default async function BlockPage({
             alignItems: 'center',
           }}
         >
-          <Link href={`/blocks/${block.height - 1}`} className="btn">
-            ← prev
-          </Link>
-          <Link href={`/blocks/${block.height + 1}`} className="btn">
-            next →
-          </Link>
+          {atGenesis ? (
+            <span
+              className="btn"
+              aria-disabled="true"
+              title="No earlier block"
+              style={{
+                opacity: 0.4,
+                pointerEvents: 'none',
+                cursor: 'not-allowed',
+              }}
+            >
+              ← prev
+            </span>
+          ) : (
+            <Link href={`/blocks/${block.height - 1}`} className="btn">
+              ← prev
+            </Link>
+          )}
+          {atHead ? (
+            <span
+              className="btn"
+              aria-disabled="true"
+              title="Already at chain head"
+              style={{
+                opacity: 0.4,
+                pointerEvents: 'none',
+                cursor: 'not-allowed',
+              }}
+            >
+              next →
+            </span>
+          ) : (
+            <Link href={`/blocks/${block.height + 1}`} className="btn">
+              next →
+            </Link>
+          )}
         </div>
       </div>
 
       <div
+        className="detail-grid-2"
         style={{
           marginTop: 32,
           display: 'grid',
@@ -264,7 +304,7 @@ export default async function BlockPage({
 
       <div style={{ marginTop: 56 }}>
         <Eyebrow>Transactions in this block</Eyebrow>
-        <FrameCard padding={0} style={{ marginTop: 12 }}>
+        <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
           {blockTxs.length ? (
             <TxsTable rows={blockTxs} showBlock={false} />
           ) : (

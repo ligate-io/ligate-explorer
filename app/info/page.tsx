@@ -65,9 +65,8 @@ export default async function InfoPage() {
         <Eyebrow>Chain info</Eyebrow>
       </div>
       <h1
-        className="serif"
+        className="serif h-detail-lg"
         style={{
-          fontSize: 88,
           lineHeight: 1,
           color: 'var(--color-ink)',
           maxWidth: '14ch',
@@ -90,12 +89,8 @@ export default async function InfoPage() {
       </p>
 
       <div
-        style={{
-          marginTop: 56,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 0,
-        }}
+        className="grid-stats-3"
+        style={{ marginTop: 56, gap: 0 }}
       >
         {stats.map((t, idx) => (
           <FrameCard
@@ -140,6 +135,7 @@ export default async function InfoPage() {
       ) : null}
 
       <div
+        className="detail-grid-2"
         style={{
           marginTop: 56,
           display: 'grid',
@@ -222,12 +218,8 @@ export default async function InfoPage() {
       <div style={{ marginTop: 64 }}>
         <Eyebrow>Resources</Eyebrow>
         <div
-          style={{
-            marginTop: 16,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 0,
-          }}
+          className="grid-stats-4"
+          style={{ marginTop: 16, gap: 0 }}
         >
           {[
             {
@@ -374,11 +366,8 @@ function FinalityCard({
         </span>
       </div>
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 0,
-        }}
+        className="grid-stats-4"
+        style={{ gap: 0 }}
       >
         {cells.map((c, idx) => (
           <div

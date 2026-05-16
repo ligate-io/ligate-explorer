@@ -12,6 +12,7 @@ export function HeroBackdrop() {
   return (
     <div
       aria-hidden="true"
+      className="hero-backdrop"
       style={{
         position: 'absolute',
         // Extend up past <main>'s 40px top padding (with extra

@@ -766,7 +766,11 @@ export function StatsStrip({
   ]
   return (
     <FrameCard padding={0} style={{ background: 'var(--color-surface)' }}>
-      <div style={{ display: 'flex' }}>
+      {/* `stats-strip-inner` carries the responsive rule: flex-wrap +
+          50%/33% tile widths on smaller viewports so KPI tiles stay
+          legible instead of squeezing to 50px wide. Desktop stays
+          on a single horizontal row. */}
+      <div className="stats-strip-inner" style={{ display: 'flex' }}>
         {tiles.map((t, i) => (
           <div key={i} className="kpi">
             <div className="label">{t.label}</div>
