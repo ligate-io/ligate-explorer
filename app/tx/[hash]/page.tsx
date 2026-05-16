@@ -152,6 +152,7 @@ export default async function TxPage({
       </div>
 
       <div
+        className="detail-grid-2"
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
@@ -330,7 +331,7 @@ export default async function TxPage({
       {tx.events.length > 0 ? (
         <div style={{ marginTop: 56 }}>
           <Eyebrow>Events</Eyebrow>
-          <FrameCard padding={0} style={{ marginTop: 12 }}>
+          <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
             <table className="tbl">
               <thead>
                 <tr>

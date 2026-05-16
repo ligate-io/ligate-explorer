@@ -13,12 +13,19 @@ export function FrameCard({
   padding = 28,
   bare = false,
   className,
+  scrollX = false,
 }: {
   children: ReactNode
   style?: CSSProperties
   padding?: number
   bare?: boolean
   className?: string
+  /** When true, children render inside a `.table-scroll` wrapper so
+   *  wide content (mainly tables) can swipe horizontally on mobile
+   *  without breaking the FrameCard's corner-bracket chrome. The
+   *  corners stay rendered at the card edges; only the inner content
+   *  scrolls. */
+  scrollX?: boolean
 }) {
   const cls = [bare ? 'frame frame-bare' : 'frame', className]
     .filter(Boolean)
@@ -27,7 +34,7 @@ export function FrameCard({
     <div className={cls} style={{ padding, ...style }}>
       <span className="fc-bl"></span>
       <span className="fc-br"></span>
-      {children}
+      {scrollX ? <div className="table-scroll">{children}</div> : children}
     </div>
   )
 }

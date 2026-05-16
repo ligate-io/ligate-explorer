@@ -34,10 +34,9 @@ export default async function FaucetPage() {
       >
         <Eyebrow>Devnet faucet</Eyebrow>
         <h1
-          className="serif"
+          className="serif h-detail-lg"
           style={{
             marginTop: 24,
-            fontSize: 88,
             lineHeight: 1,
             color: 'var(--color-ink)',
             fontWeight: 400,
@@ -62,12 +61,8 @@ export default async function FaucetPage() {
         <FaucetForm />
 
         <div
-          style={{
-            marginTop: 56,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 24,
-          }}
+          className="grid-stats-3"
+          style={{ marginTop: 56, gap: 24 }}
         >
           {[
             { k: 'Limit', v: '1 drip / address / 24h' },

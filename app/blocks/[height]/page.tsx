@@ -93,9 +93,8 @@ export default async function BlockPage({
         }}
       >
         <h1
-          className="serif"
+          className="serif h-detail-xl"
           style={{
-            fontSize: 96,
             lineHeight: 0.9,
             color: 'var(--color-ink)',
             margin: 0,
@@ -123,6 +122,7 @@ export default async function BlockPage({
       </div>
 
       <div
+        className="detail-grid-2"
         style={{
           marginTop: 32,
           display: 'grid',
@@ -264,7 +264,7 @@ export default async function BlockPage({
 
       <div style={{ marginTop: 56 }}>
         <Eyebrow>Transactions in this block</Eyebrow>
-        <FrameCard padding={0} style={{ marginTop: 12 }}>
+        <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
           {blockTxs.length ? (
             <TxsTable rows={blockTxs} showBlock={false} />
           ) : (

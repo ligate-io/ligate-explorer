@@ -62,6 +62,7 @@ export default async function AttestorSetPage({
       <Eyebrow>Attestor set</Eyebrow>
 
       <div
+        className="detail-grid-2"
         style={{
           marginTop: 20,
           display: 'grid',
@@ -74,7 +75,7 @@ export default async function AttestorSetPage({
           <h1
             className="serif"
             style={{
-              fontSize: 48,
+              fontSize: 'clamp(32px, 7vw, 48px)',
               lineHeight: 1.05,
               color: 'var(--color-ink)',
               margin: 0,
@@ -161,7 +162,7 @@ export default async function AttestorSetPage({
 
       <div style={{ marginTop: 48 }}>
         <Eyebrow>Members ({s.members.length})</Eyebrow>
-        <FrameCard padding={0} style={{ marginTop: 12 }}>
+        <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
           <table className="tbl">
             <thead>
               <tr>
@@ -199,7 +200,7 @@ export default async function AttestorSetPage({
 
       <div style={{ marginTop: 48 }}>
         <Eyebrow>Bound schemas ({boundSchemas.length})</Eyebrow>
-        <FrameCard padding={0} style={{ marginTop: 12 }}>
+        <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
           <table className="tbl">
             <thead>
               <tr>
@@ -269,7 +270,7 @@ export default async function AttestorSetPage({
 
       <div style={{ marginTop: 48 }}>
         <Eyebrow>Recent attestations</Eyebrow>
-        <FrameCard padding={0} style={{ marginTop: 12 }}>
+        <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
           <table className="tbl">
             <thead>
               <tr>

@@ -168,6 +168,9 @@ export function BlocksTable({
   compact?: boolean
 }) {
   const router = useRouter()
+  // Callers wrap us in a FrameCard with `scrollX` to opt in to
+  // horizontal-scroll behaviour on narrow viewports — see
+  // components/ui.tsx FrameCard.scrollX.
   return (
     <table className={`tbl tab-num${compact ? ' tbl-compact' : ''}`}>
       <thead>
@@ -235,6 +238,8 @@ export function TxsTable({
   compact?: boolean
 }) {
   const router = useRouter()
+  // See BlocksTable: callers wrap us in `<FrameCard scrollX>` to opt
+  // in to mobile horizontal scrolling.
   return (
     <table className={`tbl tab-num${compact ? ' tbl-compact' : ''}`}>
       <thead>

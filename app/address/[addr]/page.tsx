@@ -89,12 +89,8 @@ export default async function AddressPage({
       </div>
 
       <div
-        style={{
-          marginTop: 32,
-          display: 'grid',
-          gridTemplateColumns: role ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
-          gap: 0,
-        }}
+        className={role ? 'grid-stats-4' : 'grid-stats-3'}
+        style={{ marginTop: 32, gap: 0 }}
       >
         <FrameCard padding={24} style={{ borderRight: 0 }}>
           <div
@@ -218,7 +214,7 @@ export default async function AddressPage({
 
       <div style={{ marginTop: 56 }}>
         <Eyebrow>Recent transactions</Eyebrow>
-        <FrameCard padding={0} style={{ marginTop: 12 }}>
+        <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
           {recentTxs.length === 0 ? (
             <div
               style={{

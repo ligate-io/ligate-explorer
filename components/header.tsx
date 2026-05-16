@@ -248,8 +248,11 @@ export function Header() {
         zIndex: 10,
       }}
     >
+      {/* `header-inner` + `header-nav` classes carry the mobile rules
+          (flex-wrap, nav full-width with horizontal swipe scroll) from
+          globals.css's responsive layer. Desktop layout unchanged. */}
       <div
-        className="page-wrap"
+        className="page-wrap header-inner"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -261,7 +264,10 @@ export function Header() {
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
           <SearchBar />
         </div>
-        <nav style={{ display: 'flex', gap: 28, flexShrink: 0 }}>
+        <nav
+          className="header-nav"
+          style={{ display: 'flex', gap: 28, flexShrink: 0 }}
+        >
           {TABS.map((t) => (
             <Link
               key={t.id}

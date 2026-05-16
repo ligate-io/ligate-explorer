@@ -27,10 +27,9 @@ export default async function AttestorSetsPage({
       <div style={{ padding: '48px 0 32px' }}>
         <Eyebrow>Attestor sets</Eyebrow>
         <h1
-          className="serif"
+          className="serif h-hero"
           style={{
             marginTop: 24,
-            fontSize: 64,
             lineHeight: 1,
             color: 'var(--color-ink)',
             maxWidth: '18ch',
@@ -52,7 +51,7 @@ export default async function AttestorSetsPage({
           signed it.
         </p>
       </div>
-      <FrameCard padding={0}>
+      <FrameCard padding={0} scrollX>
         <table className="tbl">
           <thead>
             <tr>

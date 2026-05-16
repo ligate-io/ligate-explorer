@@ -820,3 +820,223 @@ footer a:hover {
     transform: translateX(100%);
   }
 }
+
+/* ============================================================================
+ * Responsive layer.
+ * Mobile-first overrides for the desktop-default layouts. Three breakpoints:
+ *   ≤640px   phone
+ *   641-1024 tablet
+ *   >1024    desktop (default styles)
+ *
+ * The grid + stat-strip + table-scroll utility classes replace inline
+ * `style={{display:'grid', gridTemplateColumns:'…'}}` in page code so the
+ * media queries can override without `!important` battles. Hero / detail
+ * heading utilities use clamp() so they scale smoothly.
+ * ============================================================================ */
+
+/* Mobile page-wrap padding (was 32px from the layout). */
+@media (max-width: 768px) {
+  .page-wrap {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* ---- Grid utilities ----------------------------------------------------- */
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+/* 4-tile stat strip (e.g. /blocks header). */
+.grid-stats-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+/* 3-tile stat strip (e.g. /faucet meta row). */
+.grid-stats-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1024px) {
+  /* Two-column-wide cards on tablet. The 3-col rows on the homepage
+     (block ticker / supply / 24h txs, etc) collapse to 2 across; the
+     third card moves to row 2. */
+  .grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .grid-stats-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  /* Single column on phones — every row card stacks. */
+  .grid-3,
+  .grid-2,
+  .grid-stats-4 {
+    grid-template-columns: 1fr;
+  }
+  .grid-stats-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Stats strip (homepage top KPI bar) --------------------------------- */
+
+/* The KPI tiles use flex inside `<FrameCard>`. On narrower viewports we
+   let them wrap so they don't get squished below 50px wide and hard to
+   read. The kpi rule below switches border-right → border-bottom on the
+   wrapped rows so dividers still show. */
+@media (max-width: 1024px) {
+  .stats-strip-inner {
+    flex-wrap: wrap;
+  }
+  .stats-strip-inner > .kpi {
+    flex: 1 1 33.333%;
+    min-width: 33.333%;
+  }
+  /* Bottom border on wrapped rows; right border on the boundary cells. */
+  .stats-strip-inner > .kpi:nth-child(-n + 3) {
+    border-bottom: 1px solid var(--color-line);
+  }
+  .stats-strip-inner > .kpi:nth-child(3n) {
+    border-right: 0;
+  }
+}
+@media (max-width: 640px) {
+  .stats-strip-inner > .kpi {
+    flex: 1 1 50%;
+    min-width: 50%;
+    padding: 14px 16px;
+  }
+  .stats-strip-inner > .kpi:nth-child(3n) {
+    border-right: 1px solid var(--color-line);
+  }
+  .stats-strip-inner > .kpi:nth-child(2n) {
+    border-right: 0;
+  }
+  .stats-strip-inner > .kpi:nth-child(-n + 4) {
+    border-bottom: 1px solid var(--color-line);
+  }
+}
+
+/* ---- Table horizontal scroll ------------------------------------------- */
+
+/* Tables have many columns and would overflow / crush content on phones.
+   Wrap them in `.table-scroll` so they get a swipe-able horizontal
+   scroll on small screens with `min-width` preserving column legibility. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll .tbl {
+  min-width: 600px;
+}
+.table-scroll .tbl.tbl-compact {
+  min-width: 480px;
+}
+
+/* ---- Header (navbar) --------------------------------------------------- */
+
+/* Below 1024px the nav links go full-width on a second row with
+   horizontal swipe scroll so a long nav doesn't squeeze the search bar. */
+@media (max-width: 1024px) {
+  .header-inner {
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 14px 16px;
+  }
+  .header-nav {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 18px;
+    padding-bottom: 4px;
+  }
+  .header-nav .nav-link {
+    flex-shrink: 0;
+  }
+}
+@media (max-width: 640px) {
+  .header-inner {
+    gap: 10px;
+  }
+}
+
+/* ---- Footer ------------------------------------------------------------ */
+
+@media (max-width: 768px) {
+  .footer-inner {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 14px !important;
+    padding: 20px 16px !important;
+  }
+}
+
+/* ---- Typography (clamp() for big titles) ------------------------------- */
+
+/* Hero / list-page H1 ("The receipt layer for AI, observed…",
+   "Every signed action on chain.", etc). Scales from ~36px on phones
+   to the original ~72-88px on desktop. */
+.h-hero {
+  font-size: clamp(36px, 7vw, 88px);
+}
+/* Detail page H1 ("#13088" on block detail, schema name on schema, etc). */
+.h-detail-xl {
+  font-size: clamp(48px, 9vw, 96px);
+}
+/* Mid-tier H1 (info page Ligate Chain devnet, faucet "Get test LGT"). */
+.h-detail-lg {
+  font-size: clamp(40px, 8vw, 88px);
+}
+
+/* Detail page 2-col LV grids (Header + Execution on /tx, Identity +
+   Production on /blocks, etc) — collapse to 1 column under 768px so
+   the LV label/value pairs don't get cramped. */
+@media (max-width: 768px) {
+  .detail-grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 32px !important;
+  }
+}
+
+/* LV grid: drop label column on narrow screens so long values
+   (sender addr, hash) get the full row width. */
+@media (max-width: 640px) {
+  .lv-grid {
+    grid-template-columns: 1fr;
+    gap: 4px 0;
+  }
+  .lv-grid .lv-label {
+    padding-bottom: 4px;
+    border-bottom: 0;
+  }
+  .lv-grid .lv-value {
+    padding-top: 0;
+    word-break: break-all;
+  }
+}
+
+/* ---- Misc reflow ------------------------------------------------------- */
+
+/* Detail-page hash-bar (`{tx.hash}` + copy button) wraps cleanly. */
+@media (max-width: 640px) {
+  .h-detail {
+    font-size: clamp(14px, 4vw, 18px) !important;
+  }
+}
+
+/* Faucet form: stack amount/button rather than space-between flex */
+@media (max-width: 500px) {
+  .faucet-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+}

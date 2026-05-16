@@ -117,10 +117,10 @@ function HeroText() {
       <div style={{ position: 'relative' }}>
         <Eyebrow>Ligate Chain · devnet 1</Eyebrow>
         <h1
+          className="h-hero"
           style={{
             marginTop: 18,
             fontFamily: 'var(--font-serif)',
-            fontSize: 64,
             lineHeight: 0.96,
             letterSpacing: '-0.02em',
             color: 'var(--color-ink)',
@@ -192,11 +192,10 @@ async function Row1() {
     .map(([, c]) => c)
   return (
     <div
+      className="grid-3"
       style={{
         position: 'relative',
         zIndex: 1,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
         gap: 24,
         marginBottom: 24,
       }}
@@ -219,12 +218,8 @@ async function Row2() {
   ])
   return (
     <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        gap: 24,
-        marginBottom: 24,
-      }}
+      className="grid-3"
+      style={{ gap: 24, marginBottom: 24 }}
     >
       <DailyAttestationsCard points={attestationsDaily} days={30} />
       <AttestorSetsCard sets={attestorSetsPage.items} />
@@ -242,13 +237,8 @@ async function Row3() {
   const attestationItems = attestationsPage.items
   return (
     <section
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-        gap: 24,
-        alignItems: 'stretch',
-        marginBottom: 24,
-      }}
+      className="grid-2"
+      style={{ gap: 24, alignItems: 'stretch', marginBottom: 24 }}
     >
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div
@@ -272,7 +262,7 @@ async function Row3() {
             View all →
           </Link>
         </div>
-        <FrameCard padding={0} style={{ flex: 1 }}>
+        <FrameCard padding={0} style={{ flex: 1 }} scrollX>
           <table className="tbl tab-num tbl-compact">
             <thead>
               <tr>
@@ -372,7 +362,7 @@ async function Row3() {
             View all →
           </Link>
         </div>
-        <FrameCard padding={0} style={{ flex: 1 }}>
+        <FrameCard padding={0} style={{ flex: 1 }} scrollX>
           <table className="tbl tab-num tbl-compact">
             <thead>
               <tr>
@@ -459,12 +449,8 @@ async function Row4() {
   const txs = allTxs.slice(0, 10)
   return (
     <section
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-        gap: 24,
-        alignItems: 'stretch',
-      }}
+      className="grid-2"
+      style={{ gap: 24, alignItems: 'stretch' }}
     >
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div
@@ -488,7 +474,7 @@ async function Row4() {
             View all →
           </Link>
         </div>
-        <FrameCard padding={0} style={{ flex: 1 }}>
+        <FrameCard padding={0} style={{ flex: 1 }} scrollX>
           <BlocksTable rows={blocks} compact />
         </FrameCard>
       </div>
@@ -514,7 +500,7 @@ async function Row4() {
             View all →
           </Link>
         </div>
-        <FrameCard padding={0} style={{ flex: 1 }}>
+        <FrameCard padding={0} style={{ flex: 1 }} scrollX>
           <TxsTable rows={txs} showBlock={false} compact />
         </FrameCard>
       </div>
@@ -562,11 +548,10 @@ function StatsStripSkeleton() {
 function Row1Skeleton() {
   return (
     <div
+      className="grid-3"
       style={{
         position: 'relative',
         zIndex: 1,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
         gap: 24,
         marginBottom: 24,
       }}
@@ -598,12 +583,8 @@ function Row1Skeleton() {
 function Row2Skeleton() {
   return (
     <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        gap: 24,
-        marginBottom: 24,
-      }}
+      className="grid-3"
+      style={{ gap: 24, marginBottom: 24 }}
     >
       <SkelCard height={220}>
         <div
@@ -677,13 +658,8 @@ function Row2Skeleton() {
 function Row3Skeleton() {
   return (
     <section
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-        gap: 24,
-        alignItems: 'stretch',
-        marginBottom: 24,
-      }}
+      className="grid-2"
+      style={{ gap: 24, alignItems: 'stretch', marginBottom: 24 }}
     >
       <SkelHomeTableCard
         eyebrowWidth={70}
@@ -705,12 +681,8 @@ function Row3Skeleton() {
 function Row4Skeleton() {
   return (
     <section
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-        gap: 24,
-        alignItems: 'stretch',
-      }}
+      className="grid-2"
+      style={{ gap: 24, alignItems: 'stretch' }}
     >
       <SkelHomeTableCard
         eyebrowWidth={110}

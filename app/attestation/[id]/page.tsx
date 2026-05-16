@@ -68,7 +68,7 @@ export default async function AttestationPage({
         <h1
           className="serif"
           style={{
-            fontSize: 48,
+            fontSize: 'clamp(32px, 6vw, 48px)',
             lineHeight: 1.05,
             color: 'var(--color-ink)',
             margin: 0,
@@ -104,6 +104,7 @@ export default async function AttestationPage({
       </div>
 
       <div
+        className="detail-grid-2"
         style={{
           marginTop: 48,
           display: 'grid',

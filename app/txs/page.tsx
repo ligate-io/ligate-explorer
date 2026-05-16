@@ -102,10 +102,9 @@ export default async function TxsPage({
       <div style={{ paddingTop: 16 }}>
         <Eyebrow>Transactions</Eyebrow>
         <h1
-          className="serif"
+          className="serif h-hero"
           style={{
             marginTop: 24,
-            fontSize: 72,
             lineHeight: 0.95,
             color: 'var(--color-ink)',
             maxWidth: '20ch',
@@ -128,12 +127,8 @@ export default async function TxsPage({
       </div>
 
       <div
-        style={{
-          marginTop: 40,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 0,
-        }}
+        className="grid-stats-4"
+        style={{ marginTop: 40, gap: 0 }}
       >
         {stats.map((t, i) => (
           <FrameCard
@@ -213,7 +208,7 @@ export default async function TxsPage({
         })}
       </div>
 
-      <FrameCard padding={0} style={{ marginTop: 24 }}>
+      <FrameCard padding={0} style={{ marginTop: 24 }} scrollX>
         {rows.length === 0 && filter !== 'All' ? (
           <div
             style={{
