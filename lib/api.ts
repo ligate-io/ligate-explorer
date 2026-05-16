@@ -650,20 +650,35 @@ export async function getFinalityStats(): Promise<FinalityStats | null> {
  * CORS (api responds `access-control-allow-origin: *`).
  */
 export async function searchByQuery(q: string): Promise<SearchResult> {
-  // The api currently returns `internal error` for some valid-shape
-  // queries (e.g. some `lig1...` addresses). Treat any non-2xx as
-  // "not found" rather than throwing — the user gets the same UX
-  // either way and we don't surface api hiccups in the search bar.
+  // Mirrors the inline `searchFromBrowser` in components/header.tsx
+  // for the rare server-side caller. Distinguishes `error` (api hiccup
+  // — query may still be valid) from `not_found` (definitive miss).
+  let res: Response;
   try {
-    const url = `${apiBase}/v1/search?q=${encodeURIComponent(q)}`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return { kind: "not_found", query: q };
-    const body = (await res.json()) as SearchResult | { error: string };
-    if ("kind" in body) return body;
-    return { kind: "not_found", query: q };
+    res = await fetch(
+      `${apiBase}/v1/search?q=${encodeURIComponent(q)}`,
+      { cache: "no-store" },
+    );
   } catch {
-    return { kind: "not_found", query: q };
+    return { kind: "error", message: "Search unavailable: api unreachable." };
   }
+  if (!res.ok) {
+    return {
+      kind: "error",
+      message: `Search unavailable: api returned ${res.status}.`,
+    };
+  }
+  let body: SearchResult | { error: string };
+  try {
+    body = (await res.json()) as SearchResult | { error: string };
+  } catch {
+    return { kind: "error", message: "Search unavailable: malformed response." };
+  }
+  if ("kind" in body) return body;
+  if ("error" in body) {
+    return { kind: "error", message: `Search unavailable: ${body.error}.` };
+  }
+  return { kind: "not_found", query: q };
 }
 
 // ---------------------------------------------------------------------------

@@ -51,18 +51,42 @@ const apiBase = (
 ).replace(/\/+$/, '')
 
 async function searchFromBrowser(q: string): Promise<SearchResult> {
+  let res: Response
   try {
-    const res = await fetch(
+    res = await fetch(
       `${apiBase}/v1/search?q=${encodeURIComponent(q)}`,
       { cache: 'no-store' },
     )
-    if (!res.ok) return { kind: 'not_found', query: q }
-    const body = (await res.json()) as SearchResult | { error: string }
-    if ('kind' in body) return body
-    return { kind: 'not_found', query: q }
   } catch {
-    return { kind: 'not_found', query: q }
+    // Network-level failure (offline, DNS, TLS, etc.). Distinct from
+    // a definitive `not_found` so the UI can render an actionable
+    // message ("api unreachable") instead of misleading the user that
+    // their query was wrong.
+    return { kind: 'error', message: 'Search unavailable: api unreachable.' }
   }
+  if (!res.ok) {
+    return {
+      kind: 'error',
+      message: `Search unavailable: api returned ${res.status}.`,
+    }
+  }
+  let body: SearchResult | { error: string }
+  try {
+    body = (await res.json()) as SearchResult | { error: string }
+  } catch {
+    return { kind: 'error', message: 'Search unavailable: malformed response.' }
+  }
+  if ('kind' in body) return body
+  // Body has `error` field instead of `kind` — the api returned a
+  // structured error envelope (e.g. `{error: "internal error"}`).
+  if ('error' in body) {
+    return {
+      kind: 'error',
+      message: `Search unavailable: ${body.error}.`,
+    }
+  }
+  // Body has neither shape; treat as a definitive miss.
+  return { kind: 'not_found', query: q }
 }
 
 // Bech32m HRP routing. Stable across api outages: the explorer routes
@@ -169,6 +193,12 @@ function SearchBar() {
           router.push(
             `/attestation/${result.schema_id}:${result.payload_hash}`,
           )
+          return
+        case 'error':
+          // API itself failed (network / 5xx / unparseable). Surface
+          // the underlying reason so the user knows it's not their
+          // query that's wrong.
+          setErr(result.message)
           return
         case 'not_found':
         default:

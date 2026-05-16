@@ -324,9 +324,15 @@ const CHAIN_INFO: ChainInfo = {
   tx_per_second: 2.4,
   finality: '~12s',
   block_time_ms: 12_000,
-  rpc_url: 'https://rpc.devnet.ligate.io',
-  api_url: 'https://api.devnet.ligate.io',
-  supply_nano: '100000000000000000',
+  // Match the live URLs used by env defaults in lib/api.ts. The
+  // old `devnet.` subdomain doesn't resolve; a user copying the RPC
+  // URL from the Info page under mock mode would get a dead link.
+  rpc_url: 'https://rpc.ligate.io',
+  api_url: 'https://api.ligate.io',
+  // Match the genesis pin (1 billion LGT, 9 decimals → 1e18 nano).
+  // Previously was 1e17 (100M), inconsistent with the fallback in
+  // lib/api.ts and with getStatsTotals' mock branch.
+  supply_nano: '1000000000000000000',
   network_status: 'Synced',
   da_layer: 'celestia (mocha-4)',
 }
