@@ -10,8 +10,7 @@ import 'server-only'
 import type {
   Address,
   AddressDetail,
-  Attestation,
-  AttestorSet,
+  AttestorSetItem,
   Block,
   ChainInfo,
   DripStatus,
@@ -129,17 +128,57 @@ for (let i = 0; i < 60; i++) {
                 span_blocks: [block.height - 5, block.height],
               }
 
+  const mockHash = 'ltx1' + bech('', 59)
+  const mockFee = (30000 + Math.floor(r() * 70000)).toString()
+  const mockProtocolFee =
+    type === 'SubmitAttestation'
+      ? '1000000'
+      : type === 'RegisterSchema'
+        ? '100000000000'
+        : type === 'RegisterAttestorSet'
+          ? '10000000000'
+          : '0'
+  const mockNonce = Math.floor(r() * 200)
+  const mockTimestamp = block.timestamp + Math.floor(r() * 3000)
   TXS.push({
-    hash: 'ltx1' + bech('', 59),
+    hash: mockHash,
     height: block.height,
     block_hash: block.hash,
     sender: sender.address,
     type,
     status,
-    fee_nano: (30000 + Math.floor(r() * 70000)).toString(),
+    fee_nano: mockFee,
+    protocol_fee_nano: mockProtocolFee,
+    // Mock the wire shape for the "Raw transaction" json viewer. Mirrors
+    // what /v1/txs/{hash} returns under USE_MOCK_API=false (RFC 0002).
+    raw_response: {
+      hash: mockHash,
+      block_height: block.height,
+      block_hash: block.hash,
+      block_timestamp: new Date(mockTimestamp).toISOString(),
+      position: 0,
+      sender: sender.address,
+      sender_pubkey: null,
+      nonce: mockNonce,
+      fee_paid_nano: mockFee,
+      protocol_fee_nano: mockProtocolFee,
+      kind:
+        type === 'SubmitAttestation'
+          ? 'submit_attestation'
+          : type === 'RegisterSchema'
+            ? 'register_schema'
+            : type === 'RegisterAttestorSet'
+              ? 'register_attestor_set'
+              : type === 'Transfer'
+                ? 'transfer'
+                : 'unknown',
+      details: payload,
+      outcome: status === 'SUCCESS' ? 'committed' : 'reverted',
+      revert_reason: null,
+    },
     gas_used: 21000 + Math.floor(r() * 80000),
-    nonce: Math.floor(r() * 200),
-    timestamp: block.timestamp + Math.floor(r() * 3000),
+    nonce: mockNonce,
+    timestamp: mockTimestamp,
     payload,
     events: [
       {
@@ -173,7 +212,6 @@ const SCHEMAS: Schema[] = [
     description:
       'AI prompt and response receipts with signed observation windows.',
     attestation_count: 4128,
-    recent_attestations: [],
   },
   {
     schema_id: 'lsc1' + bech('', 36),
@@ -187,7 +225,6 @@ const SCHEMAS: Schema[] = [
     payload_shape_hash: '0x' + hex(64),
     description: 'Carrier-signed parcel delivery confirmations.',
     attestation_count: 612,
-    recent_attestations: [],
   },
   {
     schema_id: 'lsc1' + bech('', 36),
@@ -202,7 +239,6 @@ const SCHEMAS: Schema[] = [
     description:
       'Hourly weather telemetry from registered ground stations.',
     attestation_count: 27890,
-    recent_attestations: [],
   },
   {
     schema_id: 'lsc1' + bech('', 36),
@@ -216,7 +252,6 @@ const SCHEMAS: Schema[] = [
     payload_shape_hash: '0x' + hex(64),
     description: 'Selective-disclosure identity attestations.',
     attestation_count: 884,
-    recent_attestations: [],
   },
   {
     schema_id: 'lsc1' + bech('', 36),
@@ -230,24 +265,17 @@ const SCHEMAS: Schema[] = [
     payload_shape_hash: '0x' + hex(64),
     description: 'GNSS position fixes with signed device attestation.',
     attestation_count: 11203,
-    recent_attestations: [],
   },
 ]
-
-for (const s of SCHEMAS) {
-  for (let i = 0; i < 8; i++) {
-    s.recent_attestations.push({
-      submitter: ADDRESSES[Math.floor(r() * ADDRESSES.length)].address,
-      payload_hash: '0x' + hex(64),
-      timestamp: NOW - Math.floor(r() * 600_000),
-      block_height: LATEST_HEIGHT - Math.floor(r() * 30),
-    })
-  }
-}
 
 // Attestor sets. Each `las1…` set is the quorum of pubkeys behind one
 // or more schemas. SCHEMAS reference legacy placeholder ids; map each
 // to a real `las1…` id, re-point the schemas, then build the sets.
+//
+// Mock-mode-only: real api responses use the AttestorSetItem shape
+// directly via the live fetcher. This array is consumed by
+// getStatsTotals (count only) and getAttestorSet (lookup by id) when
+// USE_MOCK_API=true.
 const ATTESTOR_SET_SEEDS = [
   { legacyId: 'attset_2of3_v1', threshold: 2, members: 3 },
   { legacyId: 'attset_3of5_v0', threshold: 3, members: 5 },
@@ -263,7 +291,18 @@ for (const s of SCHEMAS) {
   if (real) s.attestor_set_id = real
 }
 
-const ATTESTOR_SETS: AttestorSet[] = ATTESTOR_SET_SEEDS.map((seed) => {
+// Mock shape with the legacy `attestor_set_id` field the
+// getAttestorSet fallback in api.ts looks up by. Kept distinct from
+// the live AttestorSetItem (which uses `id`) so the adapter in
+// getAttestorSet's mock branch maps cleanly.
+interface MockAttestorSet {
+  attestor_set_id: string
+  members: string[]
+  threshold: number
+  schema_count: number
+}
+
+const ATTESTOR_SETS: MockAttestorSet[] = ATTESTOR_SET_SEEDS.map((seed) => {
   const id = ATTESTOR_SET_ID_MAP.get(seed.legacyId) as string
   const bound = SCHEMAS.filter((s) => s.attestor_set_id === id)
   return {
@@ -274,35 +313,8 @@ const ATTESTOR_SETS: AttestorSet[] = ATTESTOR_SET_SEEDS.map((seed) => {
     ),
     threshold: seed.threshold,
     schema_count: bound.length,
-    attestation_count: bound.reduce((n, s) => n + s.attestation_count, 0),
-    registered_block: LATEST_HEIGHT - 4000 - Math.floor(r() * 2000),
-    bound_schemas: bound.map((s) => ({
-      schema_id: s.schema_id,
-      name: s.name,
-      version: s.version,
-    })),
   }
 })
-
-// Attestations. Flatten every schema's recent attestations into
-// standalone `lat1…` records (the chain's core object) so the
-// `/attestations` list and `/attestation/[id]` detail have real data.
-const ATTESTATIONS: Attestation[] = SCHEMAS.flatMap((s) => {
-  const set = ATTESTOR_SETS.find((a) => a.attestor_set_id === s.attestor_set_id)
-  return s.recent_attestations.map((a) => ({
-    attestation_id: 'lat1' + bech('', 50),
-    schema_id: s.schema_id,
-    schema_name: s.name,
-    attestor_set_id: s.attestor_set_id,
-    submitter: a.submitter,
-    payload_hash: a.payload_hash,
-    signature_count: set ? set.threshold : 1,
-    threshold: s.threshold,
-    block_height: a.block_height,
-    tx_hash: 'ltx1' + bech('', 56),
-    timestamp: a.timestamp,
-  }))
-}).sort((a, b) => b.timestamp - a.timestamp)
 
 const CHAIN_INFO: ChainInfo = {
   chain_id: 'ligate-devnet-1',
@@ -311,6 +323,7 @@ const CHAIN_INFO: ChainInfo = {
   latest_block: LATEST_HEIGHT,
   tx_per_second: 2.4,
   finality: '~12s',
+  block_time_ms: 12_000,
   rpc_url: 'https://rpc.devnet.ligate.io',
   api_url: 'https://api.devnet.ligate.io',
   supply_nano: '100000000000000000',
@@ -323,7 +336,10 @@ export const mockData = {
   txs: TXS,
   schemas: SCHEMAS,
   attestorSets: ATTESTOR_SETS,
-  attestations: ATTESTATIONS,
+  // No mock attestations — the live AttestationItem shape is too new
+  // to bother fixturing here, and the only mock-mode consumer was a
+  // count in getStatsTotals which is fine reading 0.
+  attestations: [] as never[],
   addresses: ADDRESSES,
   info: CHAIN_INFO,
 }

@@ -14,6 +14,7 @@ const TYPES: ('All' | TxType)[] = [
   'All',
   'SubmitAttestation',
   'RegisterSchema',
+  'RegisterAttestorSet',
   'Transfer',
   'BondSequencer',
   'SubmitProof',
@@ -35,6 +36,8 @@ function pascalToWireKind(t: 'All' | TxType): string | null {
       return 'register_schema'
     case 'Transfer':
       return 'transfer'
+    case 'RegisterAttestorSet':
+      return 'register_attestor_set'
     case 'BondSequencer':
       return 'bond_sequencer'
     case 'SubmitProof':
@@ -59,7 +62,9 @@ export default async function TxsPage({
     getAllTxs(),
     getTxsPage(cursor, PER_PAGE, pascalToWireKind(filter)),
   ])
-  const filtered = filter === 'All' ? all : all.filter((t) => t.type === filter)
+  // Server filters on `?kind=` now (ligate-api PR #43). Unknown kinds
+  // come back as zero rows rather than 400, which is what we want.
+  // Trust the page result directly; no client-side fallback filter.
   const rows = pageResult.items
 
   const counts = {
@@ -200,7 +205,24 @@ export default async function TxsPage({
       </div>
 
       <FrameCard padding={0} style={{ marginTop: 24 }}>
-        <TxsTable rows={rows} />
+        {rows.length === 0 && filter !== 'All' ? (
+          <div
+            style={{
+              padding: '48px 22px',
+              textAlign: 'center',
+              color: 'var(--color-subtle)',
+            }}
+          >
+            <span
+              className="mono"
+              style={{ fontSize: 11, letterSpacing: '0.18em' }}
+            >
+              No {filter} transactions yet
+            </span>
+          </div>
+        ) : (
+          <TxsTable rows={rows} />
+        )}
       </FrameCard>
 
       <Pagination

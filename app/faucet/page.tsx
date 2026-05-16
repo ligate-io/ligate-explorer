@@ -1,11 +1,20 @@
 import type { Metadata } from 'next'
+import { getInfo } from '@/lib/api'
 import { FaucetBgImage } from '@/components/faucet-bg-image'
 import { Eyebrow } from '@/components/ui'
 import { FaucetForm } from './faucet-form'
 
 export const metadata: Metadata = { title: 'Faucet' }
+export const dynamic = 'force-dynamic'
 
-export default function FaucetPage() {
+export default async function FaucetPage() {
+  // Real block time for the "Confirmation" stat. info.finality is now
+  // the measured rollup slot interval (~6s on devnet) sourced from
+  // /v1/stats/next-block-eta — same number the dashboard's Block time
+  // tile + the BlockTickerCard show. Falls back to "~12s" if the eta
+  // endpoint is unreachable (matches the OLD hardcoded value).
+  const info = await getInfo().catch(() => null)
+  const confirmation = info?.finality ?? '~12s'
   return (
     <div style={{ position: 'relative' }}>
       {/* Backdrop: parametric curve field, blurred. The mask in
@@ -47,7 +56,7 @@ export default function FaucetPage() {
             maxWidth: 540,
           }}
         >
-          Drip 100 LGT into a devnet address. One drip per address per hour. Funds are testnet-only and have no value.
+          Drip 100 LGT into a devnet address. One drip per address every 24 hours. Funds are testnet-only and have no value.
         </p>
 
         <FaucetForm />
@@ -61,9 +70,9 @@ export default function FaucetPage() {
           }}
         >
           {[
-            { k: 'Limit', v: '1 drip / address / hour' },
+            { k: 'Limit', v: '1 drip / address / 24h' },
             { k: 'Amount', v: '100 LGT' },
-            { k: 'Confirmation', v: '~12 seconds' },
+            { k: 'Confirmation', v: confirmation },
           ].map((it) => (
             <div key={it.k}>
               <div

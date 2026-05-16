@@ -2,7 +2,8 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { SearchResult } from '@/lib/api-types'
 import { ExplorerLockup } from './lockup'
 import { SearchIcon } from './svgs'
 
@@ -37,56 +38,158 @@ function activeTab(pathname: string): string | null {
 function Wordmark() {
   return (
     <Link href="/" style={{ flexShrink: 0 }}>
-      <ExplorerLockup symbolSize={26} wordSize={15} />
+      <ExplorerLockup symbolSize={30} wordSize={18} />
     </Link>
   )
 }
 
+// Browser-side base. lib/api.ts is server-only; the api responds with
+// open CORS so we hit /v1/search directly. Same env variable the SSR
+// fetchers read.
+const apiBase = (
+  process.env.NEXT_PUBLIC_API_URL ?? 'https://api.ligate.io'
+).replace(/\/+$/, '')
+
+async function searchFromBrowser(q: string): Promise<SearchResult> {
+  try {
+    const res = await fetch(
+      `${apiBase}/v1/search?q=${encodeURIComponent(q)}`,
+      { cache: 'no-store' },
+    )
+    if (!res.ok) return { kind: 'not_found', query: q }
+    const body = (await res.json()) as SearchResult | { error: string }
+    if ('kind' in body) return body
+    return { kind: 'not_found', query: q }
+  } catch {
+    return { kind: 'not_found', query: q }
+  }
+}
+
+// Bech32m HRP routing. Stable across api outages: the explorer routes
+// directly off the prefix. The api's /v1/search is reserved for the
+// cases the prefix can't fully resolve (`lph1…` alone needs the
+// schema_id lookup). Today the api is unreliable for `lsc1…`,
+// `las1…`, and the compound `lsc1…:lph1…` (returns `internal error`
+// or `not_found`), so client-side prefix routing is the primary path
+// and the api call is the fallback for `lph1…` only.
+//
+// Returns the route to push, or null when the input shape is unknown
+// and we need to fall through to the server-side resolver.
+function routeFromPrefix(input: string): string | null {
+  // Compound attestation id: `lsc1…:lph1…`. Detect first because both
+  // halves match the single-HRP regex below.
+  if (
+    /^lsc1[a-z0-9]+:lph1[a-z0-9]+$/i.test(input)
+  ) {
+    return `/attestation/${input}`
+  }
+  if (/^lsc1[a-z0-9]+$/i.test(input)) return `/schema/${input}`
+  if (/^las1[a-z0-9]+$/i.test(input)) return `/attestor-set/${input}`
+  if (/^ltx1[a-z0-9]+$/i.test(input)) return `/tx/${input}`
+  if (/^lig1[a-z0-9]+$/i.test(input)) return `/address/${input}`
+  // Hex tx hash (chain still accepts 0x... via FromStr).
+  const hex = input.replace(/^0x/i, '')
+  if (/^[a-f0-9]{64}$/i.test(hex)) return `/tx/0x${hex.toLowerCase()}`
+  // Pure integer → block height.
+  if (/^\d+$/.test(input)) return `/blocks/${parseInt(input, 10)}`
+  return null
+}
+
 function SearchBar() {
   const router = useRouter()
+  const pathname = usePathname()
   const [val, setVal] = useState('')
   const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
-  const submit = (e: React.FormEvent) => {
+  // Clear the input whenever the path changes — that's what users
+  // expect from explorer search bars (Etherscan / Beaconcha.in /
+  // Solscan all do this). Without it, the search query lingers in
+  // the box after the user navigated away from the result page.
+  useEffect(() => {
+    setVal('')
+    setErr('')
+  }, [pathname])
+
+  // Outside-click: clear the input when the user clicks anywhere
+  // outside the search form. Listens at the document level on
+  // mousedown so it fires before the click target's own handlers.
+  useEffect(() => {
+    if (!val && !err) return
+    const onDown = (e: MouseEvent) => {
+      const form = formRef.current
+      if (!form) return
+      if (e.target instanceof Node && !form.contains(e.target)) {
+        setVal('')
+        setErr('')
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [val, err])
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const v = val.trim()
     if (!v) return
     setErr('')
-    // Bech32m identifiers: each HRP routes to a different page. Order
-    // matters because regexes are tried top-to-bottom; specific HRPs
-    // before more general ones.
-    if (/^lig1[a-z0-9]+$/.test(v)) return router.push(`/address/${v}`)
-    if (/^lsc1[a-z0-9]+$/.test(v)) return router.push(`/schema/${v}`)
-    if (/^ltx1[a-z0-9]+$/.test(v)) return router.push(`/tx/${v}`)
-    // Hex backward-compat: chain still accepts `0x...` hex on the tx
-    // path via FromStr; we route through `/tx/0x...` to keep the URL
-    // shape consistent with the existing pattern.
-    const hex = v.replace(/^0x/i, '')
-    if (/^[a-f0-9]{64}$/i.test(hex)) return router.push(`/tx/0x${hex.toLowerCase()}`)
-    // Block height (decimal int).
-    if (/^\d+$/.test(v)) return router.push(`/blocks/${parseInt(v, 10)}`)
-    // Other bech32m families exist on the chain (lblk = block hash,
-    // lba = batch hash, lsch = chain hash, lbz = DA blob hash, lsr =
-    // state root, las/lph/lpk = attestation-module ids) but no
-    // explorer routes yet. Recognise them and say so explicitly so a
-    // user pasting one knows it's a known shape, not a typo.
-    if (/^(lblk|lba|lsch|lbz|lsr|las|lph|lpk)1[a-z0-9]+$/.test(v)) {
-      return setErr(
-        `Recognised as a ${v.split('1')[0]}1… identifier, but no explorer route exists yet.`,
-      )
+
+    // Client-side prefix routing first (works without the api,
+    // covers everything the api currently chokes on).
+    const direct = routeFromPrefix(v)
+    if (direct) {
+      router.push(direct)
+      return
     }
-    setErr(
-      'Unrecognized. Paste a tx (ltx1… / 0x…), address (lig1…), schema id (lsc1…), or block height.',
-    )
+
+    // Fall through to the server resolver. Today this is mostly for
+    // `lph1…` alone (which needs the schema_id lookup the api owns),
+    // and for any future query shape we don't recognise.
+    setBusy(true)
+    try {
+      const result = await searchFromBrowser(v)
+      switch (result.kind) {
+        case 'block':
+          router.push(`/blocks/${result.block_height}`)
+          return
+        case 'tx':
+          router.push(`/tx/${result.tx_hash}`)
+          return
+        case 'address':
+          router.push(`/address/${result.address}`)
+          return
+        case 'schema':
+          router.push(`/schema/${result.schema_id}`)
+          return
+        case 'attestor_set':
+          router.push(`/attestor-set/${result.attestor_set_id}`)
+          return
+        case 'attestation':
+          router.push(
+            `/attestation/${result.schema_id}:${result.payload_hash}`,
+          )
+          return
+        case 'not_found':
+        default:
+          setErr('Nothing matched. Paste a hash, address, or block height.')
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <form onSubmit={submit} style={{ flex: 1, maxWidth: 720 }}>
-      <div className="search-wrap">
+    <form
+      ref={formRef}
+      onSubmit={submit}
+      style={{ flex: 1, maxWidth: 720 }}
+    >
+      <div className="search-wrap" data-busy={busy ? 'true' : undefined}>
         <SearchIcon />
         <input
           type="search"
-          placeholder="Search by tx (ltx1… / 0x…), address (lig1…), schema (lsc1…), or block height"
+          placeholder="Hash, address, or block height"
           value={val}
           onChange={(e) => {
             setVal(e.target.value)
@@ -94,8 +197,9 @@ function SearchBar() {
           }}
           autoComplete="off"
           spellCheck="false"
+          disabled={busy}
         />
-        <span className="search-hint">↵</span>
+        <span className="search-hint">{busy ? '…' : '↵'}</span>
       </div>
       {err ? <div className="search-error">{err}</div> : null}
     </form>

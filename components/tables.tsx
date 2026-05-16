@@ -1,22 +1,181 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { ago, fmtLgt, trunc } from '@/lib/format'
-import type { Block, Tx } from '@/lib/api-types'
+import { ago, fmtLgt, fmtLgtTrim, trunc } from '@/lib/format'
+import type { Block, Tx, TxStatus } from '@/lib/api-types'
+import { readTransfer } from '@/lib/tx-payload'
 import { ArrowRight } from './svgs'
 import { StatusPill, TypeTag } from './ui'
 
-export function BlocksTable({ rows }: { rows: Block[] }) {
+// Compact-mode combiner: status dot + type label in one cell. Saves
+// the vertical room a separate Status column + the multi-line Action
+// subtitle take. Used by the homepage's Latest transactions side so
+// it can fit ~7 rows in the same height the blocks column gets.
+function TypeDotCombined({
+  type,
+  status,
+}: {
+  type: string
+  status: TxStatus
+}) {
+  const dot =
+    status === 'SUCCESS'
+      ? 'var(--color-accent)'
+      : status === 'REVERTED'
+        ? 'var(--color-coral)'
+        : 'var(--color-amber)'
+  return (
+    <span
+      className="mono"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        fontSize: 11,
+        color: 'var(--color-bone)',
+        letterSpacing: '0.04em',
+      }}
+      title={`Status: ${status}`}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: 999,
+          background: dot,
+          flexShrink: 0,
+        }}
+      />
+      {type}
+    </span>
+  )
+}
+
+// Per-row fee cell. Two layouts:
+//
+//   default (`/txs`, `/blocks/[h]` tx list): two-line — gas paid on
+//   top, protocol-fee burn in amber below. Spelt out so the reader
+//   can see both components.
+//
+//   compact (homepage latest-txs card): one-line — gas + protocol
+//   summed into a single LGT amount. Colored amber when a protocol
+//   portion exists (visual cue this row paid a burn) so the signal
+//   isn't lost. Critical for the homepage because rows-with-protocol
+//   vs rows-without must end up the same height — otherwise the
+//   txs card stretches taller than the blocks card.
+function FeeCell({
+  feeNano,
+  protoNano,
+  compact = false,
+}: {
+  feeNano: string
+  protoNano: string
+  compact?: boolean
+}) {
+  const hasProtocol = protoNano !== '0' && protoNano !== ''
+  if (compact) {
+    const gas = feeNano && feeNano !== '0' ? BigInt(feeNano) : 0n
+    const proto = hasProtocol ? BigInt(protoNano) : 0n
+    const total = (gas + proto).toString()
+    return (
+      <span
+        className="mono"
+        style={{
+          color: hasProtocol ? 'var(--color-amber)' : 'var(--color-bone)',
+          fontSize: 11,
+        }}
+        title={
+          hasProtocol
+            ? `Gas + protocol burn: ${fmtLgt(feeNano)} + ${fmtLgtTrim(protoNano)} LGT`
+            : undefined
+        }
+      >
+        {fmtLgtTrim(total)}{' '}
+        <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+      </span>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span className="mono" style={{ color: 'var(--color-bone)', fontSize: 11 }}>
+        {fmtLgt(feeNano)}{' '}
+        <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+      </span>
+      {hasProtocol ? (
+        <span
+          className="mono"
+          style={{
+            fontSize: 9,
+            letterSpacing: '0.1em',
+            color: 'var(--color-amber)',
+          }}
+          title="Protocol fee burned at execution."
+        >
+          + {fmtLgtTrim(protoNano)} LGT proto
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+// Inline action summary rendered under the type tag. Transfer rows
+// get "→ to · amount" so the table reads at a glance who got how
+// much, instead of forcing every reader to drill into the tx.
+function ActionInline({ tx }: { tx: Tx }) {
+  if (tx.type !== 'Transfer') return null
+  const t = readTransfer(tx.payload)
+  if (!t) return null
+  return (
+    <div
+      className="mono"
+      style={{
+        fontSize: 10,
+        color: 'var(--color-muted)',
+        marginTop: 4,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      <span style={{ color: 'var(--color-subtle)' }}>→</span>
+      <span className="h-mono" style={{ color: 'var(--color-bone)' }}>
+        {trunc(t.to, 6, 4)}
+      </span>
+      <span style={{ color: 'var(--color-subtle)' }}>·</span>
+      <span style={{ color: 'var(--color-accent)' }}>
+        {fmtLgtTrim(t.amount_nano)} LGT
+      </span>
+    </div>
+  )
+}
+
+// PROPOSER column dropped: ligate-devnet-1 is single-sequencer so
+// every row would say the same operator address. The api also returns
+// `null` for `proposer` until the chain ships leader rotation
+// (chain#82). When that lands, restore as a column or surface as a
+// chrome-level "Sequencer:" chip on the page header.
+//
+// `compact` mirrors the TxsTable knob: tighter row padding via the
+// `.tbl-compact` CSS class so the two homepage cards (latest blocks
+// + latest txs) render at identical per-row heights and line up.
+export function BlocksTable({
+  rows,
+  compact = false,
+}: {
+  rows: Block[]
+  /** See TxsTable.compact. Same CSS class on both so heights match. */
+  compact?: boolean
+}) {
   const router = useRouter()
   return (
-    <table className="tbl tab-num">
+    <table className={`tbl tab-num${compact ? ' tbl-compact' : ''}`}>
       <thead>
         <tr>
           <th>Height</th>
           <th>Hash</th>
           <th>Time</th>
           <th>Txs</th>
-          <th>Proposer</th>
           <th></th>
         </tr>
       </thead>
@@ -47,9 +206,6 @@ export function BlocksTable({ rows }: { rows: Block[] }) {
             <td>
               <span className="mono">{b.tx_count}</span>
             </td>
-            <td>
-              <span className="h-mono">{trunc(b.proposer, 6, 4)}</span>
-            </td>
             <td style={{ width: 24, textAlign: 'right' }}>
               <span className="row-arrow">
                 <ArrowRight />
@@ -65,21 +221,30 @@ export function BlocksTable({ rows }: { rows: Block[] }) {
 export function TxsTable({
   rows,
   showBlock = true,
+  compact = false,
 }: {
   rows: Tx[]
   showBlock?: boolean
+  /** Compact mode: tighter row padding (via `.tbl-compact` CSS class)
+   *  + status merged into the Type cell as a colored dot (drops the
+   *  separate Status column) + no ActionInline subtitle. Keeps the
+   *  Sender column so the row still carries the "who" alongside the
+   *  "what". Used on the homepage so the latest-txs card sits at the
+   *  same per-row height as the latest-blocks card. Detail / list
+   *  pages stay in full mode. */
+  compact?: boolean
 }) {
   const router = useRouter()
   return (
-    <table className="tbl tab-num">
+    <table className={`tbl tab-num${compact ? ' tbl-compact' : ''}`}>
       <thead>
         <tr>
           <th>Hash</th>
           {showBlock ? <th>Block</th> : null}
           <th>Sender</th>
           <th>Type</th>
-          <th>Status</th>
-          <th>Fee</th>
+          {compact ? null : <th>Status</th>}
+          <th>{compact ? 'Fee' : 'Gas fee'}</th>
           <th>Time</th>
           <th></th>
         </tr>
@@ -121,16 +286,26 @@ export function TxsTable({
               </span>
             </td>
             <td>
-              <TypeTag type={t.type} />
+              {compact ? (
+                <TypeDotCombined type={t.type} status={t.status} />
+              ) : (
+                <>
+                  <TypeTag type={t.type} />
+                  <ActionInline tx={t} />
+                </>
+              )}
             </td>
+            {compact ? null : (
+              <td>
+                <StatusPill status={t.status} />
+              </td>
+            )}
             <td>
-              <StatusPill status={t.status} />
-            </td>
-            <td>
-              <span className="mono" style={{ color: 'var(--color-bone)' }}>
-                {fmtLgt(t.fee_nano)}{' '}
-                <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
-              </span>
+              <FeeCell
+                feeNano={t.fee_nano}
+                protoNano={t.protocol_fee_nano}
+                compact={compact}
+              />
             </td>
             <td>
               <span

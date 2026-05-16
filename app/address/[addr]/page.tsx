@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { getAddress } from '@/lib/api'
+import { getAddress, getAddressTxs } from '@/lib/api'
 import { fmtLgt, trunc } from '@/lib/format'
 import { CopyButton } from '@/components/copy-button'
 import { TxsTable } from '@/components/tables'
@@ -23,7 +23,16 @@ export default async function AddressPage({
   params: Promise<{ addr: string }>
 }) {
   const { addr } = await params
-  const a = await getAddress(addr)
+  // Summary + recent-tx page in parallel. The recent-tx endpoint was
+  // missing entirely until ligate-api PR #52 — pages used to render
+  // an empty "Recent transactions" placeholder. Now: real history,
+  // server-paginated, same envelope as /v1/txs so the existing
+  // TxsTable adapter just works.
+  const [a, txsPage] = await Promise.all([
+    getAddress(addr),
+    getAddressTxs(addr, undefined, 20),
+  ])
+  const recentTxs = txsPage.items
   const role = a.role
   const balanceParts = fmtLgt(a.balance_nano).split('.')
 
@@ -210,7 +219,24 @@ export default async function AddressPage({
       <div style={{ marginTop: 56 }}>
         <Eyebrow>Recent transactions</Eyebrow>
         <FrameCard padding={0} style={{ marginTop: 12 }}>
-          <TxsTable rows={a.recent_txs} />
+          {recentTxs.length === 0 ? (
+            <div
+              style={{
+                padding: '48px 22px',
+                textAlign: 'center',
+                color: 'var(--color-subtle)',
+              }}
+            >
+              <span
+                className="mono"
+                style={{ fontSize: 11, letterSpacing: '0.18em' }}
+              >
+                No transactions yet for this address
+              </span>
+            </div>
+          ) : (
+            <TxsTable rows={recentTxs} />
+          )}
         </FrameCard>
       </div>
     </>

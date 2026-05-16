@@ -1,8 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getAttestorSet } from '@/lib/api'
-import { trunc } from '@/lib/format'
+import {
+  getAttestorSet,
+  getAttestorSetAttestationsList,
+  getSchemasForSet,
+} from '@/lib/api'
+import { ago, trunc } from '@/lib/format'
 import { CopyButton } from '@/components/copy-button'
 import { ArrowRight, ThresholdRing } from '@/components/svgs'
 import { Eyebrow, FrameCard, LV } from '@/components/ui'
@@ -17,9 +21,7 @@ export async function generateMetadata({
   const { id } = await params
   const s = await getAttestorSet(id)
   return {
-    title: s
-      ? `Attestor set ${trunc(s.attestor_set_id, 8, 6)}`
-      : 'Attestor set',
+    title: s ? `Attestor set ${trunc(s.id, 8, 6)}` : 'Attestor set',
   }
 }
 
@@ -29,8 +31,17 @@ export default async function AttestorSetPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const s = await getAttestorSet(id)
+  // Set detail + recent attestations + bound schemas co-fetched.
+  // `getSchemasForSet` uses /v1/schemas?attestor_set_id=X (ligate-api
+  // PR #45 Tier 1.2) — server returns only the schemas bound to this
+  // set, no client-side scan over the full schema list.
+  const [s, attsPage, boundSchemas] = await Promise.all([
+    getAttestorSet(id),
+    getAttestorSetAttestationsList(id, undefined, 10),
+    getSchemasForSet(id),
+  ])
   if (!s) notFound()
+  const atts = attsPage.items
 
   return (
     <>
@@ -92,9 +103,9 @@ export default async function AttestorSetPage({
                 wordBreak: 'break-all',
               }}
             >
-              {s.attestor_set_id}
+              {s.id}
             </span>
-            <CopyButton value={s.attestor_set_id} />
+            <CopyButton value={s.id} />
           </div>
         </div>
         <div style={{ textAlign: 'center' }}>
@@ -133,17 +144,13 @@ export default async function AttestorSetPage({
               },
               { label: 'Schemas bound', value: String(s.schema_count) },
               {
-                label: 'Attestations',
-                value: s.attestation_count.toLocaleString(),
-              },
-              {
                 label: 'Registered',
                 value: (
                   <Link
-                    href={`/blocks/${s.registered_block}`}
+                    href={`/blocks/${s.registered_at.block_height}`}
                     className="link"
                   >
-                    #{s.registered_block}
+                    #{s.registered_at.block_height}
                   </Link>
                 ),
               },
@@ -191,7 +198,7 @@ export default async function AttestorSetPage({
       </div>
 
       <div style={{ marginTop: 48 }}>
-        <Eyebrow>Bound schemas</Eyebrow>
+        <Eyebrow>Bound schemas ({boundSchemas.length})</Eyebrow>
         <FrameCard padding={0} style={{ marginTop: 12 }}>
           <table className="tbl">
             <thead>
@@ -203,35 +210,164 @@ export default async function AttestorSetPage({
               </tr>
             </thead>
             <tbody>
-              {s.bound_schemas.map((bs) => (
-                <tr key={bs.schema_id}>
-                  <td>
-                    <Link
-                      href={`/schema/${bs.schema_id}`}
-                      className="serif"
-                      style={{ fontSize: 16, color: 'var(--color-ink)' }}
+              {boundSchemas.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    style={{
+                      padding: '32px 22px',
+                      textAlign: 'center',
+                      color: 'var(--color-subtle)',
+                    }}
+                  >
+                    <span
+                      className="mono"
+                      style={{ fontSize: 11, letterSpacing: '0.18em' }}
                     >
-                      {bs.name}
-                    </Link>
-                  </td>
-                  <td>
-                    <Link
-                      href={`/schema/${bs.schema_id}`}
-                      className="h-mono"
-                    >
-                      {trunc(bs.schema_id, 8, 6)}
-                    </Link>
-                  </td>
-                  <td className="mono" style={{ color: 'var(--color-muted)' }}>
-                    v{bs.version}
-                  </td>
-                  <td style={{ width: 24, textAlign: 'right' }}>
-                    <span className="row-arrow">
-                      <ArrowRight />
+                      No schemas bound to this set
                     </span>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                boundSchemas.map((bs) => (
+                  <tr key={bs.schema_id}>
+                    <td>
+                      <Link
+                        href={`/schema/${bs.schema_id}`}
+                        className="serif"
+                        style={{ fontSize: 16, color: 'var(--color-ink)' }}
+                      >
+                        {bs.name}
+                      </Link>
+                    </td>
+                    <td>
+                      <Link
+                        href={`/schema/${bs.schema_id}`}
+                        className="h-mono"
+                      >
+                        {trunc(bs.schema_id, 8, 6)}
+                      </Link>
+                    </td>
+                    <td
+                      className="mono"
+                      style={{ color: 'var(--color-muted)' }}
+                    >
+                      v{bs.version}
+                    </td>
+                    <td style={{ width: 24, textAlign: 'right' }}>
+                      <span className="row-arrow">
+                        <ArrowRight />
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </FrameCard>
+      </div>
+
+      <div style={{ marginTop: 48 }}>
+        <Eyebrow>Recent attestations</Eyebrow>
+        <FrameCard padding={0} style={{ marginTop: 12 }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Submitter</th>
+                <th>Schema</th>
+                <th>Payload hash</th>
+                <th>Sigs</th>
+                <th>Block</th>
+                <th>Time</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {atts.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    style={{
+                      padding: '32px 22px',
+                      textAlign: 'center',
+                      color: 'var(--color-subtle)',
+                    }}
+                  >
+                    <span
+                      className="mono"
+                      style={{ fontSize: 11, letterSpacing: '0.18em' }}
+                    >
+                      No attestations from this set yet
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                atts.map((a) => {
+                  const tMs = Date.parse(a.submitted_at.timestamp)
+                  return (
+                    <tr key={a.id}>
+                      <td>
+                        <Link
+                          href={`/address/${a.submitter}`}
+                          className="h-mono"
+                        >
+                          {trunc(a.submitter, 6, 4)}
+                        </Link>
+                      </td>
+                      <td>
+                        <Link
+                          href={`/schema/${a.schema_id}`}
+                          className="h-mono"
+                          title={a.schema_id}
+                        >
+                          {trunc(a.schema_id, 8, 4)}
+                        </Link>
+                      </td>
+                      <td>
+                        <Link
+                          href={`/attestation/${a.id}`}
+                          className="h-mono"
+                          title={a.payload_hash}
+                        >
+                          {trunc(a.payload_hash, 10, 8)}
+                        </Link>
+                      </td>
+                      <td>
+                        <span
+                          className="mono"
+                          style={{ color: 'var(--color-accent)' }}
+                        >
+                          {a.signature_count}
+                        </span>
+                      </td>
+                      <td>
+                        <Link
+                          href={`/blocks/${a.submitted_at.block_height}`}
+                          className="mono"
+                          style={{ color: 'var(--color-muted)' }}
+                        >
+                          #{a.submitted_at.block_height}
+                        </Link>
+                      </td>
+                      <td>
+                        <span
+                          className="mono"
+                          style={{ color: 'var(--color-muted)' }}
+                        >
+                          {Number.isFinite(tMs)
+                            ? ago(Math.floor((Date.now() - tMs) / 1000))
+                            : '—'}
+                        </span>
+                      </td>
+                      <td style={{ width: 24, textAlign: 'right' }}>
+                        <span className="row-arrow">
+                          <ArrowRight />
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </FrameCard>

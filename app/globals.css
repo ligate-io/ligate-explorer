@@ -17,12 +17,16 @@
   --color-subtle: #6a6a74;
   --color-accent: #a7d28c;
   --color-accent-d: #8fbd70;
+  --color-accent-l: #d3eabd;
   --color-coral: #e88a7a;
   --color-amber: #d9b26a;
 
-  --font-serif: 'Instrument Serif', 'Times New Roman', serif;
-  --font-sans: 'Space Grotesk', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* next/font/google injects --font-{serif,sans,mono}-next on <html>
+     from layout.tsx. Fall back to the legacy named family + system
+     stack so dev/SSR before hydration still picks a sensible face. */
+  --font-serif: var(--font-serif-next), 'Instrument Serif', 'Times New Roman', serif;
+  --font-sans: var(--font-sans-next), 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: var(--font-mono-next), 'JetBrains Mono', ui-monospace, monospace;
 }
 
 @theme {
@@ -37,12 +41,16 @@
   --color-subtle: #6a6a74;
   --color-accent: #a7d28c;
   --color-accent-d: #8fbd70;
+  --color-accent-l: #d3eabd;
   --color-coral: #e88a7a;
   --color-amber: #d9b26a;
 
-  --font-serif: 'Instrument Serif', 'Times New Roman', serif;
-  --font-sans: 'Space Grotesk', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* next/font/google injects --font-{serif,sans,mono}-next on <html>
+     from layout.tsx. Fall back to the legacy named family + system
+     stack so dev/SSR before hydration still picks a sensible face. */
+  --font-serif: var(--font-serif-next), 'Instrument Serif', 'Times New Roman', serif;
+  --font-sans: var(--font-sans-next), 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: var(--font-mono-next), 'JetBrains Mono', ui-monospace, monospace;
 }
 
 @layer base {
@@ -217,8 +225,8 @@ button {
   transition: all 0.15s ease;
 }
 .btn:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-accent-l);
+  color: var(--color-accent-l);
 }
 .btn:disabled {
   opacity: 0.4;
@@ -275,6 +283,30 @@ button {
 }
 .tbl tbody tr:last-child td {
   border-bottom: 0;
+}
+
+/* Compact-mode table used on the homepage's latest-blocks + latest-txs
+   cards. Applied via the `compact` prop on both BlocksTable + TxsTable
+   so the two cards have identical per-row heights.
+   - Tighter padding + slightly smaller font vs the default tbl.
+   - white-space: nowrap on cells so a long address never wraps to a
+     second line (would break height parity between rows).
+   - explicit line-height so each cell renders at the same intrinsic
+     height regardless of content (the FeeCell compact variant is
+     already single-line, but locking line-height here is the belt
+     to that suspenders). */
+.tbl-compact thead th {
+  padding: 10px 14px;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.tbl-compact tbody td {
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 /* Status pill -------------------------------------------------------------- */
@@ -348,6 +380,18 @@ input[type='search']:focus {
 }
 input::placeholder {
   color: var(--color-subtle);
+}
+
+/* WebKit's default search clear button is blue/system-coloured and
+   doesn't match the brand. Hide it; users can still clear with Esc
+   or by selecting and deleting. */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration,
+input[type='search']::-webkit-search-results-button,
+input[type='search']::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
 }
 
 /* Layout ------------------------------------------------------------------- */
@@ -486,12 +530,20 @@ input::placeholder {
   transition: all 0.15s ease;
 }
 .copy-btn:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
+  color: var(--color-accent-l);
+  border-color: var(--color-accent-l);
 }
 .copy-btn.copied {
   color: var(--color-accent);
   border-color: var(--color-accent);
+}
+/* Icon-only variant used inside dense detail rows. Square-ish hit
+   target with tighter padding so it doesn't crowd long bech32
+   addresses sitting next to it. */
+.copy-btn-compact {
+  padding: 4px 5px;
+  margin-left: 0;
+  line-height: 0;
 }
 
 /* Links -------------------------------------------------------------------- */
@@ -505,10 +557,13 @@ a,
   color: var(--color-accent);
   text-decoration: none;
   border-bottom: 1px dashed transparent;
-  transition: border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 .link:hover {
-  border-bottom-color: var(--color-accent);
+  color: var(--color-accent-l);
+  border-bottom-color: var(--color-accent-l);
 }
 
 /* JSON viewer -------------------------------------------------------------- */
@@ -575,7 +630,7 @@ a,
   transition: color 0.12s;
 }
 .h-mono:hover {
-  color: var(--color-accent);
+  color: var(--color-accent-l);
 }
 
 /* Role chip --------------------------------------------------------------- */
@@ -688,6 +743,13 @@ footer .col {
   text-transform: uppercase;
   color: var(--color-subtle);
 }
+/* Footer link hover mirrors .nav-link: subtle → ink, no underline. */
+footer a {
+  transition: color 0.15s;
+}
+footer a:hover {
+  color: var(--color-ink);
+}
 
 /* Faucet circuit backdrop ------------------------------------------------- */
 .circuit-bg {
@@ -730,4 +792,31 @@ footer .col {
 }
 .tbl tbody tr.fresh td {
   animation: rowIn 1.2s ease-out;
+}
+
+/* Skeleton shimmer — used by components/skeleton.tsx for Suspense
+   fallbacks + loading.tsx route shells. Subtle so it reads as "we
+   know what's coming" rather than "something's flashing." */
+.skeleton {
+  position: relative;
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.04),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: skel-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes skel-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }

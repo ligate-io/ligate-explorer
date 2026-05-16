@@ -4,7 +4,7 @@ export function Footer() {
   return (
     <footer
       style={{
-        marginTop: 80,
+        marginTop: 32,
         borderTop: '1px solid var(--color-line)',
         background: 'var(--color-bg)',
       }}
@@ -30,20 +30,8 @@ export function Footer() {
             status
           </a>
         </div>
-        <div className="col" style={{ color: 'var(--color-accent)' }}>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 6,
-              height: 6,
-              borderRadius: 999,
-              background: 'currentColor',
-              marginRight: 8,
-              verticalAlign: 'middle',
-              boxShadow: '0 0 6px currentColor',
-            }}
-          />
-          BLOCK 1247 · 2.4 TPS
+        <div className="col" style={{ color: 'var(--color-subtle)' }}>
+          ligate-devnet-1
         </div>
       </div>
     </footer>

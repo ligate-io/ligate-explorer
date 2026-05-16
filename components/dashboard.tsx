@@ -8,7 +8,9 @@
 // composition (we don't have a light node yet; the strip stays in
 // code for when one ships).
 
-import { fmtLgtCompact } from '@/lib/format'
+import Link from 'next/link'
+import type { AttestationDailyPoint, AttestorSetItem } from '@/lib/api-types'
+import { fmtLgtCompact, trunc } from '@/lib/format'
 import { FrameCard } from './ui'
 
 export function RunNodeStrip() {
@@ -61,11 +63,28 @@ export function RunNodeStrip() {
   )
 }
 
-export function SupplyCard() {
-  const supply = 100_000_000
-  const bonded = 38_400_000
-  const circulating = supply - bonded
-  const pct = bonded / supply
+// Supply card. Total + treasury sourced from /v1/stats/totals (real,
+// no fabrication). Treasury row links to the treasury address page.
+// On devnet-1 the treasury wallet equals the operator-sequencer's;
+// they split at testnet/mainnet — surfaced as a small caveat so
+// investors don't read the bar as "operator owns most of the chain".
+export function SupplyCard({
+  totalNano,
+  treasuryNano,
+  treasuryAddress,
+}: {
+  totalNano?: string
+  treasuryNano?: string
+  treasuryAddress?: string
+}) {
+  const total = totalNano ? BigInt(totalNano) : null
+  const treasury = treasuryNano ? BigInt(treasuryNano) : null
+  const treasuryPct =
+    total && treasury && total > 0n
+      ? Number((treasury * 10000n) / total) / 100
+      : null
+  const totalLgt = total ? Number(total / 1_000_000_000n) : null
+  const treasuryLgt = treasury ? Number(treasury / 1_000_000_000n) : null
   return (
     <FrameCard padding={22}>
       <div
@@ -80,21 +99,24 @@ export function SupplyCard() {
       >
         Supply
       </div>
-      <div
-        style={{
-          display: 'flex',
-          height: 6,
-          marginBottom: 18,
-          background: 'rgba(167,210,140,0.08)',
-        }}
-      >
+      {treasuryPct != null ? (
         <div
           style={{
-            width: `${pct * 100}%`,
-            background: 'linear-gradient(90deg, var(--color-accent), #6fb8d9)',
+            display: 'flex',
+            height: 6,
+            marginBottom: 18,
+            background: 'rgba(167,210,140,0.08)',
           }}
-        />
-      </div>
+        >
+          <div
+            style={{
+              width: `${treasuryPct}%`,
+              background:
+                'linear-gradient(90deg, var(--color-accent), #6fb8d9)',
+            }}
+          />
+        </div>
+      ) : null}
       <div
         style={{
           display: 'grid',
@@ -107,24 +129,45 @@ export function SupplyCard() {
           Total supply
         </span>
         <span className="mono" style={{ fontSize: 13, color: 'var(--color-ink)' }}>
-          {supply.toLocaleString()}{' '}
-          <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+          {totalLgt != null ? (
+            <>
+              {totalLgt.toLocaleString()}{' '}
+              <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+            </>
+          ) : (
+            <span style={{ color: 'var(--color-subtle)' }}>unknown</span>
+          )}
         </span>
-        <span className="mono" style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-          Bonded
-        </span>
-        <span className="mono" style={{ fontSize: 13, color: 'var(--color-accent)' }}>
-          {bonded.toLocaleString()}{' '}
-          <span style={{ color: 'var(--color-subtle)' }}>
-            ({(pct * 100).toFixed(1)}%)
-          </span>
-        </span>
-        <span className="mono" style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-          Circulating
-        </span>
-        <span className="mono" style={{ fontSize: 13, color: 'var(--color-bone)' }}>
-          {circulating.toLocaleString()}
-        </span>
+        {treasuryLgt != null ? (
+          <>
+            <span
+              className="mono"
+              style={{ fontSize: 12, color: 'var(--color-muted)' }}
+            >
+              Treasury
+            </span>
+            <span
+              className="mono"
+              style={{ fontSize: 13, color: 'var(--color-accent)' }}
+            >
+              {treasuryAddress ? (
+                <a
+                  href={`/address/${treasuryAddress}`}
+                  className="link"
+                  style={{ color: 'var(--color-accent)' }}
+                  title={treasuryAddress}
+                >
+                  {treasuryLgt.toLocaleString()}
+                </a>
+              ) : (
+                treasuryLgt.toLocaleString()
+              )}{' '}
+              <span style={{ color: 'var(--color-subtle)' }}>
+                ({treasuryPct?.toFixed(1)}%)
+              </span>
+            </span>
+          </>
+        ) : null}
         <span className="mono" style={{ fontSize: 12, color: 'var(--color-muted)' }}>
           Inflation
         </span>
@@ -133,6 +176,22 @@ export function SupplyCard() {
           <span style={{ color: 'var(--color-subtle)' }}>(devnet)</span>
         </span>
       </div>
+      {treasuryAddress ? (
+        <div
+          className="mono"
+          style={{
+            marginTop: 14,
+            fontSize: 9,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: 'var(--color-subtle)',
+            lineHeight: 1.4,
+          }}
+        >
+          On devnet-1 the treasury wallet equals the operator&apos;s.
+          They split at testnet/mainnet.
+        </div>
+      ) : null}
     </FrameCard>
   )
 }
@@ -147,14 +206,23 @@ function deterministicSeq(seed: number, count: number): number[] {
   return out
 }
 
-export function Tx24hCard() {
-  const random = deterministicSeq(7, 24)
-  const bars = random.map(
-    (rv, i) => 1500 + Math.floor(rv * 4000) + Math.sin(i / 3) * 800
-  )
+// 24-hour transaction trend. Take a `bars` prop (one per day, ordered
+// oldest → newest) sourced from /v1/stats/tx-rate-daily. Single-day
+// view degrades to a one-bar rendering plus an honest "no activity"
+// state when the chain hasn't seen any txs at all.
+export function Tx24hCard({ bars: barsProp }: { bars?: number[] }) {
+  const bars = barsProp && barsProp.length > 0 ? barsProp : []
   const total = bars.reduce((a, b) => a + b, 0)
-  const max = Math.max(...bars)
-  const pctChange = ((bars[23] - bars[0]) / bars[0]) * 100
+  const max = Math.max(1, ...bars)
+  const pctChange =
+    bars.length >= 2 && bars[0] > 0
+      ? ((bars[bars.length - 1] - bars[0]) / bars[0]) * 100
+      : 0
+  const labels = bars.length === 24
+    ? [0, 6, 12, 18]
+    : Array.from({ length: Math.min(4, bars.length) }, (_, i) =>
+        Math.round((i * (bars.length - 1)) / 3),
+      )
 
   return (
     <FrameCard padding={22}>
@@ -184,15 +252,17 @@ export function Tx24hCard() {
               className="serif"
               style={{ fontSize: 30, color: 'var(--color-ink)', lineHeight: 1 }}
             >
-              {(total / 1000).toFixed(1)}K
+              {total >= 1000 ? `${(total / 1000).toFixed(1)}K` : total.toString()}
             </span>
-            <span
-              className="mono"
-              style={{ fontSize: 11, color: 'var(--color-accent)' }}
-            >
-              {pctChange >= 0 ? '+' : ''}
-              {pctChange.toFixed(1)}%
-            </span>
+            {total > 0 && bars.length >= 2 && bars[0] > 0 ? (
+              <span
+                className="mono"
+                style={{ fontSize: 11, color: 'var(--color-accent)' }}
+              >
+                {pctChange >= 0 ? '+' : ''}
+                {pctChange.toFixed(1)}%
+              </span>
+            ) : null}
           </div>
         </div>
         <span
@@ -207,66 +277,134 @@ export function Tx24hCard() {
           24h
         </span>
       </div>
-      <svg viewBox="0 0 240 80" width="100%" height="80" preserveAspectRatio="none">
-        {bars.map((v, i) => {
-          const h = (v / max) * 70
-          return (
-            <rect
-              key={i}
-              x={i * 10 + 1}
-              y={75 - h}
-              width="6"
-              height={h}
-              fill="var(--color-accent)"
-              opacity={0.4 + (i / 24) * 0.6}
-            >
-              <animate
-                attributeName="height"
-                from="0"
-                to={h}
-                dur="0.6s"
-                begin={`${i * 0.02}s`}
-                fill="freeze"
-              />
-              <animate
-                attributeName="y"
-                from="75"
-                to={75 - h}
-                dur="0.6s"
-                begin={`${i * 0.02}s`}
-                fill="freeze"
-              />
-            </rect>
-          )
-        })}
-      </svg>
-      <div
-        style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}
-      >
-        {[0, 6, 12, 18].map((h) => (
+      {bars.length === 0 ? (
+        <div
+          style={{
+            height: 80,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
           <span
-            key={h}
             className="mono"
-            style={{ fontSize: 9, color: 'var(--color-subtle)' }}
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              color: 'var(--color-subtle)',
+            }}
           >
-            {h}h
+            No activity in window
           </span>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <svg
+          viewBox={`0 0 ${Math.max(240, bars.length * 10)} 80`}
+          width="100%"
+          height="80"
+          preserveAspectRatio="none"
+        >
+          {bars.map((v, i) => {
+            const h = (v / max) * 70
+            const slotW = Math.max(240, bars.length * 10) / bars.length
+            const opacity = 0.4 + (i / Math.max(1, bars.length - 1)) * 0.6
+            return (
+              <rect
+                key={i}
+                x={i * slotW + 1}
+                y={75 - h}
+                width={Math.max(2, slotW - 4)}
+                height={h}
+                fill="var(--color-accent)"
+                opacity={opacity}
+              >
+                <animate
+                  attributeName="height"
+                  from="0"
+                  to={h}
+                  dur="0.6s"
+                  begin={`${i * 0.02}s`}
+                  fill="freeze"
+                />
+                <animate
+                  attributeName="y"
+                  from="75"
+                  to={75 - h}
+                  dur="0.6s"
+                  begin={`${i * 0.02}s`}
+                  fill="freeze"
+                />
+              </rect>
+            )
+          })}
+        </svg>
+      )}
+      {bars.length === 24 ? (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginTop: 4,
+          }}
+        >
+          {labels.map((h) => (
+            <span
+              key={h}
+              className="mono"
+              style={{ fontSize: 9, color: 'var(--color-subtle)' }}
+            >
+              {h}h
+            </span>
+          ))}
+        </div>
+      ) : null}
     </FrameCard>
   )
 }
 
-export function DailyAttestationsCard() {
-  const cells = deterministicSeq(13, 7 * 30).map((rv) => Math.floor(rv * 4))
-  const cellColor = (v: number) =>
-    v === 0
-      ? 'rgba(167,210,140,0.06)'
-      : v === 1
-        ? 'rgba(167,210,140,0.25)'
-        : v === 2
-          ? 'rgba(167,210,140,0.55)'
-          : 'var(--color-accent)'
+// Daily attestation density. Now powered by /v1/stats/attestations-daily
+// (ligate-api PR #53). Renders the last `days` days as a horizontal
+// strip of squares — each cell is one day, intensity scales with the
+// day's count vs the window max. Bottom legend mirrors GitHub's
+// less / more pattern. Title attr on each cell shows date + count
+// for hover-inspect.
+//
+// Wire response is sparse (Postgres GROUP BY doesn't emit zero-count
+// rows), so the card backfills missing dates with 0 on this side.
+const DAYS = 30
+const CELL_PALETTE = [
+  'rgba(167,210,140,0.06)', // 0 = no attestations
+  'rgba(167,210,140,0.25)', // 1 = low
+  'rgba(167,210,140,0.55)', // 2 = medium
+  'var(--color-accent)',    // 3 = high
+] as const
+
+export function DailyAttestationsCard({
+  points = [],
+  days = DAYS,
+}: {
+  points?: AttestationDailyPoint[]
+  days?: number
+}) {
+  const byDate = new Map(points.map((p) => [p.date, p.count]))
+  // Build `days` cells ending today (UTC), oldest first → newest last.
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const cells: { date: string; count: number }[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setUTCDate(d.getUTCDate() - i)
+    const date = d.toISOString().slice(0, 10)
+    cells.push({ date, count: byDate.get(date) ?? 0 })
+  }
+  const max = Math.max(0, ...cells.map((c) => c.count))
+  const total = cells.reduce((acc, c) => acc + c.count, 0)
+  const bucket = (n: number) => {
+    if (max === 0 || n === 0) return 0
+    const r = n / max
+    return r < 0.25 ? 1 : r < 0.6 ? 2 : 3
+  }
   return (
     <FrameCard padding={22}>
       <div
@@ -289,112 +427,74 @@ export function DailyAttestationsCard() {
           Daily attestations
         </div>
         <span className="mono" style={{ fontSize: 11, color: 'var(--color-bone)' }}>
-          44.7K{' '}
-          <span style={{ color: 'var(--color-subtle)' }}>last 30d</span>
+          {total.toLocaleString()}{' '}
+          <span style={{ color: 'var(--color-subtle)' }}>last {days}d</span>
         </span>
       </div>
+      {/* 5 × 6 grid (30 cells). Each cell is one day, sized small so
+          the whole heatmap is compact. Hover title carries the date
+          + count — no in-cell label needed, the colour tells the
+          intensity story on its own. Reading order top-left →
+          bottom-right is chronological (oldest first, today last). */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(30, 1fr)',
+          gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
           gap: 3,
         }}
       >
-        {cells.map((v, i) => (
+        {cells.map((c) => (
           <div
-            key={i}
-            style={{ aspectRatio: '1 / 1', background: cellColor(v) }}
+            key={c.date}
+            title={`${c.date} · ${c.count} ${c.count === 1 ? 'attestation' : 'attestations'}`}
+            style={{
+              height: 18,
+              background: CELL_PALETTE[bucket(c.count)],
+              cursor: 'default',
+            }}
           />
         ))}
       </div>
+      {/* less/more legend pinned right. */}
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           alignItems: 'center',
-          marginTop: 12,
+          marginTop: 10,
+          gap: 4,
         }}
       >
         <span
           className="mono"
-          style={{
-            fontSize: 9,
-            color: 'var(--color-subtle)',
-            letterSpacing: '0.18em',
-          }}
+          style={{ fontSize: 9, color: 'var(--color-subtle)' }}
         >
-          30d ago
+          less
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span
-            className="mono"
-            style={{ fontSize: 9, color: 'var(--color-subtle)' }}
-          >
-            less
-          </span>
-          {[0, 1, 2, 3].map((v) => (
-            <div
-              key={v}
-              style={{ width: 10, height: 10, background: cellColor(v) }}
-            />
-          ))}
-          <span
-            className="mono"
-            style={{ fontSize: 9, color: 'var(--color-subtle)' }}
-          >
-            more
-          </span>
-        </div>
+        {[0, 1, 2, 3].map((v) => (
+          <div
+            key={v}
+            style={{ width: 10, height: 10, background: CELL_PALETTE[v] }}
+          />
+        ))}
         <span
           className="mono"
-          style={{
-            fontSize: 9,
-            color: 'var(--color-subtle)',
-            letterSpacing: '0.18em',
-          }}
+          style={{ fontSize: 9, color: 'var(--color-subtle)' }}
         >
-          today
+          more
         </span>
       </div>
     </FrameCard>
   )
 }
 
-// AttestorSetsCard replaces the original SequencersCard for v0.
-// Devnet runs single-sequencer (per chain repo #79) so a sequencer
-// distribution widget would be fiction. The attestor-set distribution
-// IS real data driven by registered schemas, fits the same visual
-// shape, and grows as schemas register. Tracking issue for restoring
-// a real Sequencers widget once multi-sequencer ships:
-//   ligate-io/ligate-explorer issue (filed alongside this swap).
-export function AttestorSetsCard({
-  schemas,
-}: {
-  schemas: { threshold: string }[]
-}) {
-  const buckets = new Map<string, number>()
-  for (const s of schemas) {
-    buckets.set(s.threshold, (buckets.get(s.threshold) ?? 0) + 1)
-  }
-  // Sort by required-signature count then total members so the legend
-  // reads 1-of-1 → 2-of-3 → 3-of-5 in a stable order.
-  const palette = [
-    'var(--color-accent)',
-    '#6fb8d9',
-    'var(--color-amber)',
-    '#c9a3e8',
-    'var(--color-coral)',
-  ]
-  const rows = [...buckets.entries()]
-    .map(([label, value]) => {
-      const [have, total] = label.split(' of ').map((n) => parseInt(n, 10))
-      return { label, value, have, total }
-    })
-    .sort((a, b) => a.have - b.have || a.total - b.total)
-    .map((r, i) => ({ ...r, color: palette[i % palette.length] }))
-
-  const total = rows.reduce((acc, r) => acc + r.value, 0) || 1
-
+// AttestorSetsCard. Real rows pulled from /v1/attestor-sets?limit=5
+// (api ligate-api#39). Each row links to the set detail with its
+// threshold and bound-schema count. Was previously a synthetic
+// threshold-distribution derived from schemas — replaced now that the
+// list endpoint exists. Tracking issue for restoring a Sequencers
+// widget once multi-sequencer lands: ligate-io/ligate-explorer.
+export function AttestorSetsCard({ sets }: { sets: AttestorSetItem[] }) {
   return (
     <FrameCard padding={22}>
       <div
@@ -416,8 +516,8 @@ export function AttestorSetsCard({
         >
           Attestor sets
         </div>
-        <a
-          href="/schemas"
+        <Link
+          href="/attestor-sets"
           className="mono link"
           style={{
             fontSize: 10,
@@ -426,63 +526,96 @@ export function AttestorSetsCard({
             cursor: 'pointer',
           }}
         >
-          View →
-        </a>
+          View all →
+        </Link>
       </div>
-      <div style={{ display: 'flex', height: 4, marginBottom: 22 }}>
-        {rows.map((row) => (
-          <div
-            key={row.label}
-            style={{ flex: row.value, background: row.color }}
-          />
-        ))}
-      </div>
-      {rows.map((row, i) => (
+      {sets.length === 0 ? (
         <div
-          key={row.label}
+          className="mono"
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '8px 0',
-            borderBottom: i < rows.length - 1 ? '1px solid var(--color-line)' : 0,
+            padding: '24px 0',
+            textAlign: 'center',
+            color: 'var(--color-subtle)',
+            fontSize: 11,
+            letterSpacing: '0.18em',
           }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          No attestor sets registered yet
+        </div>
+      ) : (
+        sets.map((s, i) => (
+          <div
+            key={s.id}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '10px 0',
+              borderBottom:
+                i < sets.length - 1 ? '1px solid var(--color-line)' : 0,
+            }}
+          >
             <span
               style={{
-                width: 6,
-                height: 6,
-                borderRadius: 999,
-                background: row.color,
-                display: 'inline-block',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                minWidth: 0,
               }}
-            />
-            <span
-              className="mono"
-              style={{ fontSize: 12, color: 'var(--color-bone)' }}
             >
-              {row.label}
+              <Link
+                href={`/attestor-set/${s.id}`}
+                className="h-mono"
+                style={{ fontSize: 12 }}
+              >
+                {trunc(s.id, 8, 4)}
+              </Link>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 10,
+                  color: 'var(--color-subtle)',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                {s.schema_count}{' '}
+                {s.schema_count === 1 ? 'schema' : 'schemas'}
+              </span>
             </span>
-          </span>
-          <span
-            className="mono tab-num"
-            style={{ fontSize: 13, color: 'var(--color-ink)' }}
-          >
-            {row.value}
-          </span>
-        </div>
-      ))}
+            <span
+              className="mono tab-num"
+              style={{ fontSize: 13, color: 'var(--color-accent)' }}
+            >
+              {s.threshold} of {s.members.length}
+            </span>
+          </div>
+        ))
+      )}
     </FrameCard>
   )
 }
 
-export function FeeTrackerCard() {
-  const tiers = [
-    { label: 'Fast', value: '0.000045', sub: '< 1 block', color: 'var(--color-accent)' },
-    { label: 'Med', value: '0.000028', sub: '~ 2 blocks', color: 'var(--color-amber)' },
-    { label: 'Slow', value: '0.000018', sub: '~ 5 blocks', color: 'var(--color-subtle)' },
-  ]
+// Fee tracker. Once the api populates `fee_paid_nano` on tx records
+// we'll derive Fast / Med / Slow from the recent-tx fee distribution.
+// Pre-population the api returns null for every tx, so derived
+// percentiles would be 0 / 0 / 0. Caller passes `tiers` when real
+// fee data is computed; without it, this renders an honest empty
+// state instead of fake LGT prices.
+export function FeeTrackerCard({
+  tiers,
+}: {
+  tiers?: Array<{ label: string; value: string; sub: string; color: string }>
+}) {
+  const empty = !tiers || tiers.length === 0
+  const tierColors = ['var(--color-accent)', 'var(--color-amber)', 'var(--color-subtle)']
+  const tiersToShow = empty
+    ? ['Fast', 'Med', 'Slow'].map((label, i) => ({
+        label,
+        value: '—',
+        sub: 'no data',
+        color: tierColors[i] ?? 'var(--color-subtle)',
+      }))
+    : tiers
   return (
     <FrameCard padding={22}>
       <div
@@ -504,11 +637,11 @@ export function FeeTrackerCard() {
           gap: 8,
         }}
       >
-        {tiers.map((t) => (
+        {tiersToShow.map((t) => (
           <div
             key={t.label}
             style={{
-              border: `1px solid ${t.color}`,
+              border: `1px solid ${empty ? 'var(--color-line)' : t.color}`,
               padding: 12,
               position: 'relative',
             }}
@@ -519,7 +652,7 @@ export function FeeTrackerCard() {
                 fontSize: 9,
                 letterSpacing: '0.22em',
                 textTransform: 'uppercase',
-                color: t.color,
+                color: empty ? 'var(--color-subtle)' : t.color,
                 marginBottom: 8,
               }}
             >
@@ -527,7 +660,11 @@ export function FeeTrackerCard() {
             </div>
             <div
               className="serif"
-              style={{ fontSize: 22, color: 'var(--color-ink)', lineHeight: 1 }}
+              style={{
+                fontSize: 22,
+                color: empty ? 'var(--color-subtle)' : 'var(--color-ink)',
+                lineHeight: 1,
+              }}
             >
               {t.value}
             </div>
@@ -540,7 +677,7 @@ export function FeeTrackerCard() {
                 letterSpacing: '0.1em',
               }}
             >
-              LGT · {t.sub}
+              {empty ? t.sub : `LGT · ${t.sub}`}
             </div>
           </div>
         ))}
@@ -557,10 +694,34 @@ export function FeeTrackerCard() {
           borderTop: '1px solid var(--color-line)',
         }}
       >
-        Updated · <span style={{ color: 'var(--color-bone)' }}>just now</span>
+        {empty
+          ? 'Awaiting fee-bearing txs'
+          : (
+            <>
+              Updated · <span style={{ color: 'var(--color-bone)' }}>just now</span>
+            </>
+          )}
       </div>
     </FrameCard>
   )
+}
+
+// TX/sec is computed over the recent-tx sample (oldest → newest in
+// the 100-row /v1/txs window). On a sparse devnet that's often a
+// fraction of a tx per second; .toFixed(2) would always read "0.00"
+// and hide the real activity. Scale formatting to the magnitude:
+//   ≥ 1     → "1.23" / "12.3"
+//   ≥ 0.01  → "0.04"
+//   ≥ 0.0001 → "0.0004"
+//   < 0.0001 → "<0.0001"
+//   exactly 0 (no signal) → "—"
+function formatTps(tps: number): string {
+  if (!Number.isFinite(tps) || tps === 0) return '—'
+  if (tps >= 10) return tps.toFixed(1)
+  if (tps >= 1) return tps.toFixed(2)
+  if (tps >= 0.01) return tps.toFixed(3)
+  if (tps >= 0.0001) return tps.toFixed(4)
+  return '<0.0001'
 }
 
 export function StatsStrip({
@@ -571,8 +732,15 @@ export function StatsStrip({
   const tiles = [
     { label: 'Chain ID', value: info.chain_id, mono: true },
     { label: 'Latest block', value: '#' + info.latest_block.toLocaleString(), mono: true },
-    { label: 'TX / sec', value: info.tx_per_second.toFixed(2), serif: true },
-    { label: 'Finality', value: info.finality, mono: true },
+    { label: 'TX / sec', value: formatTps(info.tx_per_second), serif: true },
+    // "Block time" not "Finality" — `info.finality` now sources from
+    // /v1/stats/next-block-eta.mean_block_interval_secs (rollup slot
+    // production interval, ~6s on devnet), not the DA-layer settlement
+    // floor (~18s). The two were getting confused; the strip and the
+    // BlockTickerCard now read the same number under the same label.
+    // The full DA-settlement breakdown still lives on /info under
+    // "Finality breakdown".
+    { label: 'Block time', value: info.finality, mono: true },
     { label: 'LGT supply', value: fmtLgtCompact(info.supply_nano), mono: true },
     {
       label: 'Network',

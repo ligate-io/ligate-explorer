@@ -1,6 +1,11 @@
 import type { Metadata } from 'next'
-import { getAllBlocks, getBlocksPage } from '@/lib/api'
-import { fmtLgt } from '@/lib/format'
+import {
+  getAllBlocks,
+  getAllTxs,
+  getBlocksPage,
+  getStatsTotals,
+} from '@/lib/api'
+import { fmtLgtTrim } from '@/lib/format'
 import { BlocksTable } from '@/components/tables'
 import { BlockSpark } from '@/components/svgs'
 import { Eyebrow, FrameCard } from '@/components/ui'
@@ -19,32 +24,51 @@ export default async function BlocksPage({
   const params = await searchParams
   const cursor = params.cursor
 
-  // Two reads: a 100-block snapshot for header stats (avg txs, fees,
-  // max height) and a cursor-paginated page for the table. Keeps the
-  // header stable across paging and stops us from needing a separate
-  // /v1/blocks/stats endpoint pre-devnet.
-  const [all, pageResult] = await Promise.all([
+  // Four reads:
+  //   - all blocks (100-row sample): sparkline + avg txs / block
+  //   - all txs   (100-row sample): real fees (gas + protocol burn)
+  //   - stats totals: chain-wide block count (not the sample size)
+  //   - blocks page: cursor-paginated table body
+  // The Block adapter ships `fees_total_nano: "0"` because the slot
+  // wire shape doesn't carry it; summing from the tx sample is the
+  // honest way to get an actual fee figure here without a per-block
+  // N+1 fan-out.
+  const [all, allTxs, totals, pageResult] = await Promise.all([
     getAllBlocks(),
+    getAllTxs(),
+    getStatsTotals().catch(() => null),
     getBlocksPage(cursor, PER_PAGE),
   ])
   const totalTxs = all.reduce((acc, b) => acc + b.tx_count, 0)
-  const avgTxs = (totalTxs / all.length).toFixed(2)
-  const totalFees = all.reduce(
-    (acc, b) => acc + BigInt(b.fees_total_nano),
-    0n
-  )
+  const avgTxs = all.length > 0 ? (totalTxs / all.length).toFixed(2) : '0.00'
+  // Real fees = gas paid (currently 0 — indexer doesn't surface
+  // fee_paid_nano yet) + protocol burn (real numbers, e.g. 0.10 LGT
+  // per RegisterSchema, 0.0001 LGT per SubmitAttestation). Summing
+  // both matches what the block-detail page shows in its Fees total
+  // row, and lines up with the brief: "Block detail FEES TOTAL: sum
+  // fee_paid_nano + protocol_fee_nano".
+  let totalFees = 0n
+  for (const t of allTxs) {
+    if (t.fee_nano) totalFees += BigInt(t.fee_nano)
+    if (t.protocol_fee_nano) totalFees += BigInt(t.protocol_fee_nano)
+  }
+  // Chain-wide indexed-blocks count. /v1/stats/totals.blocks is the
+  // canonical source; falls back to the latest block height (a tight
+  // upper bound) if the stats endpoint fails.
+  const indexedBlocks = totals?.blocks ?? all[0]?.height ?? 0
 
   const rows = pageResult.items
 
   const stats = [
-    { label: 'Latest block', value: '#' + all[0].height },
-    { label: 'Indexed blocks', value: all.length, serif: true },
+    { label: 'Latest block', value: '#' + all[0].height.toLocaleString(), serif: true },
+    { label: 'Indexed blocks', value: indexedBlocks.toLocaleString(), serif: true },
     { label: 'Avg txs / block', value: avgTxs, serif: true },
     {
       label: 'Fees collected',
-      value: fmtLgt(totalFees).split('.')[0],
+      value: fmtLgtTrim(totalFees.toString()),
       serif: true,
       suffix: 'LGT',
+      sub: `Σ gas + protocol · ${allTxs.length} tx${allTxs.length === 1 ? '' : 's'} sample`,
     },
   ]
 
@@ -84,48 +108,69 @@ export default async function BlocksPage({
           gap: 0,
         }}
       >
-        {stats.map((t, i) => (
-          <FrameCard
-            key={i}
-            padding={20}
-            style={{ borderRight: i === stats.length - 1 ? '1px solid var(--color-line)' : 0 }}
-          >
-            <div
-              className="mono"
+        {stats.map((t, i) => {
+          const hasSub = 'sub' in t && t.sub
+          return (
+            <FrameCard
+              key={i}
+              padding={20}
               style={{
-                fontSize: 10,
-                letterSpacing: '0.22em',
-                textTransform: 'uppercase',
-                color: 'var(--color-subtle)',
-                marginBottom: 10,
+                borderRight:
+                  i === stats.length - 1 ? '1px solid var(--color-line)' : 0,
               }}
             >
-              {t.label}
-            </div>
-            <div
-              className={t.serif ? 'serif' : 'mono'}
-              style={{
-                fontSize: t.serif ? 36 : 18,
-                lineHeight: 1,
-                color: 'var(--color-ink)',
-              }}
-            >
-              {t.value}
-              {t.suffix ? (
-                <span
+              <div
+                className="mono"
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.22em',
+                  textTransform: 'uppercase',
+                  color: 'var(--color-subtle)',
+                  marginBottom: 10,
+                }}
+              >
+                {t.label}
+              </div>
+              <div
+                className="serif"
+                style={{
+                  fontSize: 36,
+                  lineHeight: 1,
+                  color: 'var(--color-ink)',
+                }}
+              >
+                {t.value}
+                {'suffix' in t && t.suffix ? (
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 14,
+                      color: 'var(--color-subtle)',
+                      marginLeft: 8,
+                    }}
+                  >
+                    {t.suffix}
+                  </span>
+                ) : null}
+              </div>
+              {hasSub ? (
+                <div
+                  className="mono"
                   style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 14,
+                    marginTop: 10,
+                    fontSize: 9,
+                    letterSpacing: '0.16em',
+                    textTransform: 'uppercase',
                     color: 'var(--color-subtle)',
-                    marginLeft: 8,
                   }}
+                  title="Sum of gas + protocol fees across the last 100 indexed transactions. Slot-level fees aren't on the wire today, so this is the closest honest figure without an N+1 fan-out across every block."
                 >
-                  {t.suffix}
-                </span>
+                  {t.sub}
+                </div>
               ) : null}
-            </div>
-          </FrameCard>
-        ))}
+            </FrameCard>
+          )
+        })}
       </div>
 
       <div style={{ marginTop: 32, marginBottom: 8 }}>

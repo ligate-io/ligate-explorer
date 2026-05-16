@@ -3,26 +3,81 @@ import "server-only";
 import { getMockAddressDetail, getMockDripStatus, mockData } from "./mock";
 import type {
   AddressDetail,
-  Attestation,
-  AttestorSet,
+  AttestationDailyPoint,
+  AttestationItem,
+  AttestorSetItem,
   Block,
   ChainInfo,
   DripResult,
   DripStatus,
+  FinalityStats,
+  NextBlockEta,
   PageResult,
   Schema,
+  SearchResult,
+  StatsTotals,
+  TopHolder,
   Tx,
+  TxRatePoint,
   TxStatus,
   TxType,
 } from "./api-types";
 
 const useMockApi = process.env.USE_MOCK_API !== "false";
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://api.ligate.io";
+const rpcBase = process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.ligate.io";
+// Genesis-pinned token id for $LGT on ligate-devnet-1. The chain's
+// `gas_token_config.token_id` writes this; it's stable across the
+// devnet's life. Override via env if the token id ever changes.
+const lgtTokenId =
+  process.env.NEXT_PUBLIC_LGT_TOKEN_ID ??
+  "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7";
+const daLayer = process.env.NEXT_PUBLIC_DA_LAYER ?? "Celestia (mocha-4)";
+// Fallback finality string when there aren't enough blocks yet to
+// measure the actual median block time. Once we have real data, the
+// computed value supersedes this.
+const fallbackFinality = process.env.NEXT_PUBLIC_FINALITY ?? "~12s";
+// Hard fallback for supply if the chain bank query fails (network
+// blip, chain pause). Defaults to the genesis pin (1B). The live read
+// in getInfo() supersedes this whenever the chain answers.
+const fallbackLgtSupplyNano =
+  process.env.NEXT_PUBLIC_LGT_SUPPLY ?? "1000000000000000000"; // 1B LGT
 
+// All fetches honor the api's Cache-Control headers (added in
+// ligate-api PR #45). Tier 0 brief set sensible TTLs per endpoint:
+//   5s   /v1/info, /v1/blocks list, /v1/txs list, /v1/stats/next-block-eta
+//   10s  /v1/stats/totals
+//   30s  /v1/stats/finality, /v1/attestations list
+//   60s  /v1/schemas list, /v1/attestor-sets list
+//   300s /v1/blocks/{height}, /v1/txs/{hash}, /v1/attestations/{id}
+// Next.js fetch cache + Vercel CDN both pick this up automatically.
+// Same-URL fetches in a single render are deduped; same-URL fetches
+// across renders within max-age serve from the cache.
+//
+// AutoRefresh's router.refresh() invalidates the route cache so polling
+// still detects new blocks — the fetch cache just stops us from making
+// duplicate origin RTTs within a single render OR within the response's
+// max-age window.
+//
+// Caller can override per-fetch (e.g. drip-tx polling needs no-store).
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${apiBase}${path}`, { cache: "no-store", ...init });
+  const res = await fetch(`${apiBase}${path}`, init);
   if (!res.ok) {
     throw new Error(`API ${path} returned ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+/**
+ * Fetch directly against the chain RPC (rpc.ligate.io), bypassing the
+ * indexer api. Used for things the api doesn't surface: live total
+ * supply, attestor-set state by id, etc. Same no-cache semantics so
+ * AutoRefresh on the home page picks up movements.
+ */
+async function fetchChain<T>(path: string): Promise<T> {
+  const res = await fetch(`${rpcBase}${path}`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Chain ${path} returned ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
@@ -60,17 +115,26 @@ interface ApiInfoResponse {
 interface ApiBlockResponse {
   height: number;
   hash: string;
+  // Populated post ligate-api PR #44 (indexer derives from slot N-1).
+  // Still `null` on genesis + on legacy rows pre-migration.
   parent_hash: string | null;
   state_root: string | null;
   // RFC3339 with milliseconds, e.g. `"2026-05-11T19:30:56.952Z"`.
   timestamp: string;
   tx_count: number;
   batch_count: number;
-  // Chain doesn't expose these in v0 (no leader rotation yet, no slot
-  // size accounting); reserved per RFC 0002's "always present, null
-  // if absent" rule.
+  // Sequencer's Celestia bech32 address (the `da_address` that
+  // submitted the slot's first batch). `null` on legacy rows. On
+  // single-sequencer devnet this is the same address every block.
   proposer: string | null;
   size_bytes: number | null;
+  // Settlement state (PR #44). Field is `skip_serializing_if`-omitted
+  // entirely on legacy rows — TS captures that with `?:` so the adapter
+  // can distinguish absent from any real string value.
+  finality_status?: 'pending' | 'finalized' | string;
+  // RFC3339 ms timestamp the indexer observed pending → finalized.
+  // Omitted while still pending or on legacy rows.
+  finalized_at?: string | null;
 }
 
 /** RFC 0002 `Tx` body. */
@@ -87,6 +151,9 @@ interface ApiTxResponse {
   nonce: number | null;
   // u128 decimal string per RFC 0002.
   fee_paid_nano: string | null;
+  // u128 decimal string. Burned at execution (registration / attestation
+  // protocol fees). `"0"` for transfer + free kinds.
+  protocol_fee_nano: string | null;
   // `"transfer" | "register_attestor_set" | "register_schema" |
   //  "submit_attestation" | "unknown"`
   kind: string;
@@ -103,6 +170,10 @@ interface ApiSchemaResponse {
   version: number;
   owner: string;
   attestor_set_id: string;
+  /** Required-signatures count (M in "M of N"). Now ships on every
+   *  schema row (ligate-api PR #52) — was a separate attestor-set
+   *  fetch before. Total members (N) still needs the set lookup. */
+  threshold: number;
   fee_routing_bps: number;
   fee_routing_addr: string | null;
   payload_shape_hash: string;
@@ -169,31 +240,128 @@ interface ApiAddressDripStatusResponse {
 // ---------------------------------------------------------------------------
 
 /**
- * Three fields don't have a direct chain source today:
+ * Adapter takes the api's RFC 0002 `Info` body plus an optional
+ * `tx_per_second` we computed from the recent-tx window. Three fields
+ * still don't have a direct chain source and come from env:
  *
- * - `tx_per_second`: rolling-window counter; api follow-up.
- * - `finality`: hardcoded to `instant` (MockDa devnet target). Real
- *   Celestia DA will surface this dynamically.
- * - `supply_nano`: total LGT supply; would need a `bank.token_supply`
- *   query at the api layer.
+ * - `finality`: NEXT_PUBLIC_FINALITY, defaults to "~12s" (Celestia mocha).
+ * - `supply_nano`: NEXT_PUBLIC_LGT_SUPPLY, defaults to 100M LGT
+ *   (the genesis pin on devnet, which doesn't inflate). Will become a
+ *   live read when the api adds /v1/bank/supply.
+ * - `da_layer`: NEXT_PUBLIC_DA_LAYER, defaults to "Celestia (mocha-4)".
  *
  * `rpc_url` is left empty for the explorer page to fill from its own
  * env (it knows its target better than the api does).
  */
-function adaptInfoResponse(r: ApiInfoResponse): ChainInfo {
+function adaptInfoResponse(
+  r: ApiInfoResponse,
+  txPerSecond: number,
+  blockTimeMs: number | null,
+  supplyNano: string,
+  finalitySource: 'estimated' | 'observed' | string | null,
+  finalityDaLayer: string | null,
+): ChainInfo {
+  // head_lag_slots: 0 → fully caught up; non-zero → still syncing.
+  // Surfaced as a UI string so the dashboard pill doesn't have to
+  // duplicate the threshold logic.
+  const networkStatus =
+    r.head_lag_slots == null
+      ? "live"
+      : r.head_lag_slots === 0
+        ? "Synced"
+        : `Syncing (lag ${r.head_lag_slots})`;
+  // Finality string: prefer the api's stats endpoint (currently
+  // estimated; flips to observed once the api adds the observation
+  // path). When source is "estimated" surface that to the user with
+  // a small italic suffix so partners don't mistake it for real-time.
+  const finalityStr = formatBlockTime(blockTimeMs);
+  const finalityWithSource =
+    finalitySource === "estimated"
+      ? `${finalityStr} (est)`
+      : finalityStr;
   return {
     chain_id: r.chain_id,
     chain_hash: r.chain_hash,
     version: r.version,
     latest_block: r.indexer_height ?? 0,
-    tx_per_second: 0,
-    finality: "instant",
-    rpc_url: "",
+    tx_per_second: txPerSecond,
+    finality: finalityWithSource,
+    block_time_ms: blockTimeMs,
+    rpc_url: rpcBase,
     api_url: apiBase,
-    supply_nano: "0",
-    network_status: "live",
-    da_layer: "MockDa",
+    supply_nano: supplyNano,
+    network_status: networkStatus,
+    da_layer: finalityDaLayer ?? daLayer,
   };
+}
+
+/**
+ * Median delta between consecutive block timestamps. The chain's a
+ * single-sequencer rollup so once a block lands it's canonical; the
+ * "finality" the user cares about is "how long until the next slot
+ * locks my tx in". Median is more honest than mean here because the
+ * occasional 30-second pause skews the average, but most blocks land
+ * close to the median.
+ *
+ * Returns null if we don't have enough blocks to measure (caller
+ * falls back to the env-driven default).
+ */
+function medianBlockTimeMs(
+  blocks: Array<{ timestamp: string }>,
+): number | null {
+  // Sort newest → oldest defensively. The api orders this way already
+  // but a future endpoint change shouldn't silently break this.
+  const ts = blocks
+    .map((b) => Date.parse(b.timestamp))
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => b - a)
+  if (ts.length < 2) return null
+  const deltas: number[] = []
+  for (let i = 0; i < ts.length - 1; i++) deltas.push(ts[i] - ts[i + 1])
+  deltas.sort((a, b) => a - b)
+  const mid = Math.floor(deltas.length / 2)
+  return deltas.length % 2
+    ? deltas[mid]
+    : Math.round((deltas[mid - 1] + deltas[mid]) / 2)
+}
+
+function formatBlockTime(ms: number | null): string {
+  if (ms == null) return fallbackFinality
+  const seconds = ms / 1000
+  if (seconds < 1) return `~${seconds.toFixed(2)}s`
+  if (seconds < 10) return `~${seconds.toFixed(1)}s`
+  return `~${Math.round(seconds)}s`
+}
+
+/**
+ * Compute tx-per-second from the recent-tx sample.
+ *
+ * Old approach used a fixed 5-minute window, which pinned tps at 0
+ * on a sparse chain (devnet has bursts then long quiet periods);
+ * the stat never moved.
+ *
+ * New approach: span across the full sample (oldest → newest tx in
+ * the 100-row /v1/txs fetch). Gives the real recent average — never
+ * pinned at zero as long as the chain has any history.
+ *
+ * Returns 0 when there's fewer than 2 dateable rows (genuine "no
+ * signal" case) so the UI can render a "—" instead of a fake number.
+ */
+function computeTpsFromTxs(
+  txs: Array<{ block_timestamp: string | null }>,
+): number {
+  const ts: number[] = [];
+  for (const t of txs) {
+    if (!t.block_timestamp) continue;
+    const ms = Date.parse(t.block_timestamp);
+    if (Number.isFinite(ms)) ts.push(ms);
+  }
+  if (ts.length < 2) return 0;
+  const newest = Math.max(...ts);
+  const oldest = Math.min(...ts);
+  const spanSec = (newest - oldest) / 1000;
+  if (spanSec < 1) return 0;
+  return ts.length / spanSec;
 }
 
 /**
@@ -208,27 +376,45 @@ function rfc3339ToMillis(s: string | null): number {
 }
 
 /**
- * Two chain-side gaps the api echoes through as `null`:
+ * Block adapter, updated post ligate-api PR #44 (slot settlement
+ * timing). Five fields became real:
  *
- * - `parent_hash`: chain returns `null` for genesis and currently for
- *   non-genesis too (slot summary doesn't expose it on REST). The UI
- *   renders a truncated hash; empty string keeps it from crashing.
- * - `proposer`: leader rotation isn't shipped (ligate-chain#82);
- *   surfaced as `"unknown"` so the UI's link target is non-empty.
+ * - `parent_hash`: indexer derives from slot N-1; populated on every
+ *   non-genesis post-PR row.
+ * - `proposer`: sequencer's Celestia bech32 (`celestia1…`). Single
+ *   value across devnet-1 (one sequencer); rotates on multi-sequencer
+ *   chains.
+ * - `finality_status`: `"pending" | "finalized"`. `skip_serializing_if`
+ *   omitted entirely on legacy rows — UI treats absent as "no badge".
+ * - `finalized_at`: RFC3339 ms when the slot flipped to finalized.
+ *   Adapter converts to ms once.
  *
- * `fees_total_nano` isn't tracked at the slot level by the chain; we
- * surface `"0"`. A follow-up can sum `transactions.fee_paid_nano` per
- * slot at the indexer write site.
+ * `fees_total_nano` still isn't on the wire; block detail recomputes
+ * by summing `fee_paid_nano + protocol_fee_nano` across the slot's
+ * tx list (per ligate-api PR #43.B.3 brief).
  */
 function adaptBlockResponse(r: ApiBlockResponse): Block {
+  // Convert the optional `finalized_at` RFC3339 string to ms once at
+  // the adapter so detail pages don't redo the parse + null-check.
+  // Preserve `null` (vs `undefined`) so a falsey check still works
+  // but the type carries the "explicitly absent" intent.
+  const finalizedAtMs =
+    typeof r.finalized_at === 'string' ? rfc3339ToMillis(r.finalized_at) : null;
   return {
     height: r.height,
     hash: r.hash,
-    prev_hash: r.parent_hash ?? "",
+    // Pass nulls through so the UI can distinguish "not yet known"
+    // (legacy row pre PR #44) from a real value. Old adapter coerced
+    // to "" / "unknown", which prevented "—" placeholder rendering.
+    prev_hash: r.parent_hash ?? null,
+    proposer: r.proposer ?? null,
     timestamp: rfc3339ToMillis(r.timestamp),
     tx_count: r.tx_count,
-    proposer: r.proposer ?? "unknown",
+    // Slot-level fees_total_nano isn't on the wire; detail page
+    // recomputes from the block's tx list (sums fee_paid + protocol).
     fees_total_nano: "0",
+    finality_status: r.finality_status,
+    finalized_at_ms: finalizedAtMs,
   };
 }
 
@@ -244,11 +430,12 @@ function kindToTxType(kind: string): TxType {
       return "Transfer";
     case "register_schema":
       return "RegisterSchema";
+    case "register_attestor_set":
+      return "RegisterAttestorSet";
     case "submit_attestation":
       return "SubmitAttestation";
-    // Forward-compat: register_attestor_set, unknown, future kinds
-    // collapse to Transfer for the pill. The full kind is still
-    // visible in the JSON payload viewer.
+    // Unknown / future kinds collapse to Transfer for the pill. The
+    // full kind is still visible in the JSON payload viewer.
     default:
       return "Transfer";
   }
@@ -287,6 +474,11 @@ function adaptTxResponse(r: ApiTxResponse): Tx {
     type: kindToTxType(r.kind),
     status: outcomeToStatus(r.outcome),
     fee_nano: r.fee_paid_nano ?? "0",
+    protocol_fee_nano: r.protocol_fee_nano ?? "0",
+    // Stash the entire wire shape so the "Raw transaction" section
+    // on the tx detail page can render every field, not just the
+    // ones the typed Tx interface promotes.
+    raw_response: r as unknown as Record<string, unknown>,
     gas_used: 0,
     nonce: r.nonce ?? 0,
     timestamp: rfc3339ToMillis(r.block_timestamp),
@@ -342,8 +534,319 @@ function adaptDripResponse(r: ApiDripResponse): DripResult {
 
 export async function getInfo(): Promise<ChainInfo> {
   if (useMockApi) return mockData.info;
-  const raw = await fetchJson<ApiInfoResponse>("/v1/info");
-  return adaptInfoResponse(raw);
+  // Five fetches in parallel:
+  //   - /v1/info                 chain identity + indexer height
+  //   - /v1/txs                  recent-tx sample for tps
+  //   - /v1/stats/totals         total supply
+  //   - /v1/stats/finality       DA-floor settlement breakdown
+  //   - /v1/stats/next-block-eta measured rollup block interval
+  // Each non-info call has its own catch so one slow / failing source
+  // doesn't take the whole header down.
+  const [info, txs, totals, finality, nextEta] = await Promise.all([
+    fetchJson<ApiInfoResponse>("/v1/info"),
+    fetchJson<Page<ApiTxResponse>>("/v1/txs?limit=100").catch(() => ({
+      data: [],
+      pagination: { next: null, limit: 0 },
+    })),
+    fetchJson<StatsTotals>("/v1/stats/totals").catch(() => null),
+    fetchJson<FinalityStats>("/v1/stats/finality").catch(() => null),
+    getNextBlockEta(),
+  ]);
+  const tps = computeTpsFromTxs(txs.data);
+  // The "block_time_ms" the dashboard reads is the rollup's slot
+  // production interval, NOT the DA-layer settlement floor. Two
+  // sources can give it to us:
+  //   1. /v1/stats/next-block-eta.mean_block_interval_secs — measured
+  //      from the indexer's slot timestamps (real, ~6s on devnet).
+  //   2. /v1/stats/finality.p50_seconds — DA settlement percentile
+  //      (~18s on Celestia mocha). Wrong dimension, but a fallback
+  //      when the eta endpoint is unreachable or warming up.
+  // The eta endpoint wins when present so the BlockTickerCard "Block
+  // time" and the dashboard "Block time" tile show the same number.
+  const measuredMs =
+    nextEta?.mean_block_interval_secs != null
+      ? Math.round(nextEta.mean_block_interval_secs * 1000)
+      : null;
+  const finalityP50Ms =
+    finality && Number.isFinite(finality.p50_seconds)
+      ? Math.round(finality.p50_seconds * 1000)
+      : null;
+  const blockTimeMs = measuredMs ?? finalityP50Ms;
+  // Source label drives the "(est)" suffix on the strip: 'observed'
+  // when we have a real measurement (eta or post-warmup finality),
+  // 'estimated' only while the chain is in its first-hour bootstrap.
+  const blockTimeSource =
+    measuredMs != null ? 'observed' : (finality?.source ?? null);
+  const supplyNano = totals?.total_supply_nano ?? fallbackLgtSupplyNano;
+  return adaptInfoResponse(
+    info,
+    tps,
+    blockTimeMs,
+    supplyNano,
+    blockTimeSource,
+    finality?.da_layer ?? null,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// New stats endpoints (ligate-api#39)
+// ---------------------------------------------------------------------------
+
+export async function getFinalityStats(): Promise<FinalityStats | null> {
+  if (useMockApi) {
+    return {
+      window: "static",
+      sampled_count: 0,
+      p50_seconds: 12,
+      p95_seconds: 15,
+      p99_seconds: 15,
+      da_layer: "celestia-mocha",
+      source: "estimated",
+      as_of: new Date().toISOString(),
+    };
+  }
+  try {
+    return await fetchJson<FinalityStats>("/v1/stats/finality");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Single endpoint that resolves a search-bar query (block height, hash,
+ * address, schema id, attestor-set id, attestation compound id) to a
+ * typed `kind`. Server does the prefix detection so the explorer doesn't
+ * have to reimplement it client-side. Browser-callable directly via
+ * CORS (api responds `access-control-allow-origin: *`).
+ */
+export async function searchByQuery(q: string): Promise<SearchResult> {
+  // The api currently returns `internal error` for some valid-shape
+  // queries (e.g. some `lig1...` addresses). Treat any non-2xx as
+  // "not found" rather than throwing — the user gets the same UX
+  // either way and we don't surface api hiccups in the search bar.
+  try {
+    const url = `${apiBase}/v1/search?q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return { kind: "not_found", query: q };
+    const body = (await res.json()) as SearchResult | { error: string };
+    if ("kind" in body) return body;
+    return { kind: "not_found", query: q };
+  } catch {
+    return { kind: "not_found", query: q };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// New attestation + attestor-set list endpoints (ligate-api#39)
+// ---------------------------------------------------------------------------
+//
+// Distinct from the older skeletal `Attestation` / `AttestorSet` types:
+// the new wire shapes carry nested `submitted_at` / `registered_at`
+// (block_height + tx_hash + timestamp) and the `id` compound for
+// routing to detail. UI components consume `AttestationItem` /
+// `AttestorSetItem` directly; no adapter pass needed.
+
+interface AttestationItemPage {
+  data: AttestationItem[];
+  pagination: { next: string | null; limit: number };
+}
+
+interface AttestorSetItemPage {
+  data: AttestorSetItem[];
+  pagination: { next: string | null; limit: number };
+}
+
+// `opts.live: true` overrides the api's Cache-Control (30s on the
+// attestations list) with a 6s revalidation window so the homepage's
+// AutoRefresh-driven re-render actually picks up new attestations
+// within one polling cycle. Detail pages and the /attestations list
+// page leave it unset → they get the full 30s cache benefit.
+export async function getAttestationItems(
+  cursor?: string,
+  limit = 20,
+  opts?: { live?: boolean },
+): Promise<PageResult<AttestationItem>> {
+  if (useMockApi) return { items: [], nextCursor: null };
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (cursor) qs.set("before", cursor);
+  try {
+    const raw = await fetchJson<AttestationItemPage>(
+      `/v1/attestations?${qs}`,
+      opts?.live ? { next: { revalidate: 6 } } : undefined,
+    );
+    return { items: raw.data, nextCursor: raw.pagination.next };
+  } catch {
+    return { items: [], nextCursor: null };
+  }
+}
+
+export async function getAttestationItem(
+  id: string,
+): Promise<AttestationItem | null> {
+  if (useMockApi) return null;
+  try {
+    return await fetchJson<AttestationItem>(`/v1/attestations/${id}`);
+  } catch {
+    return null;
+  }
+}
+
+// `opts.live: true` overrides the 60s Cache-Control on /v1/attestor-sets
+// with a 6s revalidation window — same rationale as
+// getAttestationItems. Used by the homepage's attestor-sets card.
+export async function getAttestorSetItems(
+  cursor?: string,
+  limit = 20,
+  opts?: { live?: boolean },
+): Promise<PageResult<AttestorSetItem>> {
+  if (useMockApi) return { items: [], nextCursor: null };
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (cursor) qs.set("before", cursor);
+  try {
+    const raw = await fetchJson<AttestorSetItemPage>(
+      `/v1/attestor-sets?${qs}`,
+      opts?.live ? { next: { revalidate: 6 } } : undefined,
+    );
+    return { items: raw.data, nextCursor: raw.pagination.next };
+  } catch {
+    return { items: [], nextCursor: null };
+  }
+}
+
+export async function getSchemaAttestations(
+  schemaId: string,
+  cursor?: string,
+  limit = 20,
+): Promise<PageResult<AttestationItem>> {
+  if (useMockApi) return { items: [], nextCursor: null };
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (cursor) qs.set("before", cursor);
+  try {
+    const raw = await fetchJson<AttestationItemPage>(
+      `/v1/schemas/${schemaId}/attestations?${qs}`,
+    );
+    return { items: raw.data, nextCursor: raw.pagination.next };
+  } catch {
+    return { items: [], nextCursor: null };
+  }
+}
+
+export async function getAttestorSetAttestationsList(
+  setId: string,
+  cursor?: string,
+  limit = 20,
+): Promise<PageResult<AttestationItem>> {
+  if (useMockApi) return { items: [], nextCursor: null };
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (cursor) qs.set("before", cursor);
+  try {
+    const raw = await fetchJson<AttestationItemPage>(
+      `/v1/attestor-sets/${setId}/attestations?${qs}`,
+    );
+    return { items: raw.data, nextCursor: raw.pagination.next };
+  } catch {
+    return { items: [], nextCursor: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stats endpoints — server-derived aggregates that the api caches for ~30s.
+// Shape mirrors `crates/api/src/stats.rs::*Response` 1-to-1; no adapter
+// layer because the explorer's UI is the only consumer and the shapes
+// already fit the widgets.
+// ---------------------------------------------------------------------------
+
+export async function getStatsTotals(): Promise<StatsTotals> {
+  if (useMockApi) {
+    return {
+      indexed_at_slot: mockData.info.latest_block,
+      blocks: mockData.blocks.length,
+      txs_total: mockData.txs.length,
+      txs_committed: mockData.txs.filter((t) => t.status === "SUCCESS").length,
+      addresses: mockData.addresses.length,
+      schemas: mockData.schemas.length,
+      attestor_sets: mockData.attestorSets?.length ?? 0,
+      attestations: mockData.attestations?.length ?? 0,
+      // 1B LGT genesis pin — matches the live api now that PR #42
+      // landed (supply query was hitting a hex path the chain rejected;
+      // switched to bech32m token_…). Keeping the mock in sync so
+      // mock-mode renders the same number.
+      total_supply_nano: "1000000000000000000",
+    };
+  }
+  return fetchJson<StatsTotals>("/v1/stats/totals");
+}
+
+// /v1/stats/next-block-eta — drop-in for the BlockTickerCard live
+// countdown. 5s cache TTL on the api side. Cancel-safe: caller
+// fetches on mount, then polls every ~10s; the timer between fetches
+// runs purely client-side off `expected_next_at`.
+export async function getNextBlockEta(): Promise<NextBlockEta | null> {
+  if (useMockApi) {
+    // Synthetic tick so the BlockTickerCard renders sensibly under
+    // mock mode. Pretend the last block landed 3s ago and the next is
+    // 9s away (chain runs ~12s slots).
+    const now = Date.now();
+    const lastTs = new Date(now - 3000).toISOString();
+    const expected = new Date(now + 9000).toISOString();
+    return {
+      last_block_height: mockData.info.latest_block,
+      last_block_timestamp: lastTs,
+      mean_block_interval_secs: 12,
+      p95_block_interval_secs: 14.5,
+      expected_next_at: expected,
+      seconds_since_last: 3,
+      seconds_until_expected: 9,
+      indexer_lag_secs: 0,
+    };
+  }
+  try {
+    return await fetchJson<NextBlockEta>("/v1/stats/next-block-eta");
+  } catch {
+    return null;
+  }
+}
+
+export async function getTxRateDaily(days = 1): Promise<TxRatePoint[]> {
+  if (useMockApi) return [];
+  try {
+    const r = await fetchJson<{ days: number; points: TxRatePoint[] }>(
+      `/v1/stats/tx-rate-daily?days=${days}`,
+    );
+    return r.points;
+  } catch {
+    return [];
+  }
+}
+
+// Daily attestation count (ligate-api PR #53). Sparse: days with
+// zero attestations are absent from `points`. Caller fills missing
+// dates with 0 when building the heatmap. Default 30 days, capped
+// server-side at 90.
+export async function getAttestationsDaily(
+  days = 30,
+): Promise<AttestationDailyPoint[]> {
+  if (useMockApi) return [];
+  try {
+    const r = await fetchJson<{ days: number; points: AttestationDailyPoint[] }>(
+      `/v1/stats/attestations-daily?days=${days}`,
+    );
+    return r.points;
+  } catch {
+    return [];
+  }
+}
+
+export async function getTopHolders(n = 10): Promise<TopHolder[]> {
+  if (useMockApi) return [];
+  try {
+    const r = await fetchJson<{ source: string; holders: TopHolder[] }>(
+      `/v1/stats/top-holders?n=${n}`,
+    );
+    return r.holders;
+  } catch {
+    return [];
+  }
 }
 
 export async function getLatestBlocks(limit = 20): Promise<Block[]> {
@@ -479,53 +982,84 @@ export async function getTx(hash: string): Promise<Tx | null> {
 }
 
 export async function getTxsForBlock(height: number): Promise<Tx[]> {
-  // No `/v1/blocks/{height}/txs` endpoint on the api today. Filter
-  // the recent-txs page client-side; works for small chain history
-  // (devnet). A future endpoint at the api adds a direct join.
+  // Server-side block filter (ligate-api PR #45 Tier 1.1). Was a
+  // 100-row scan + client-side filter, which silently missed a
+  // block's txs when the block was older than the most recent 100
+  // chain-wide txs. Now exact: api returns only this block's rows.
   if (useMockApi) return mockData.txs.filter((t) => t.height === height);
-  const raw = await fetchJson<Page<ApiTxResponse>>("/v1/txs?limit=100");
-  return raw.data.filter((t) => t.block_height === height).map(adaptTxResponse);
+  const raw = await fetchJson<Page<ApiTxResponse>>(
+    `/v1/txs?block_height=${height}&limit=100`,
+  );
+  return raw.data.map(adaptTxResponse);
 }
 
 /**
  * Adapt RFC 0002 `Schema` body → explorer `Schema` shape.
  *
- * Chain-side gaps surfaced as defaults:
+ * Threshold is on every schema row now (ligate-api PR #52). For list
+ * views we just stringify M ("2"); for detail views the caller passes
+ * `totalMembers` to render the full "M of N" once the attestor set
+ * has been cross-fetched.
  *
- * - `threshold` is on the bound `AttestorSet`, not the `Schema`.
- *   Resolving per-row in a list view requires N extra roundtrips;
- *   `getSchemas` emits the placeholder `"0 of 0"` so the UI's
- *   `s.threshold.split(' of ')` destructure works without crashing.
- *   `getSchema` does the extra `/v1/attestor-sets/{id}` call to fill
- *   the real `"M of N"` for detail views.
- * - `description` isn't carried on-chain. Empty string.
- * - `recent_attestations` would need a `/v1/schemas/{id}/attestations`
- *   endpoint (not shipped on the api yet). Empty array.
+ * `description` isn't carried on-chain. Empty string.
  */
 function adaptSchemaResponse(
   r: ApiSchemaResponse,
-  threshold: string = "0 of 0",
+  totalMembers?: number,
 ): Schema {
+  const thresholdStr =
+    typeof totalMembers === 'number'
+      ? `${r.threshold} of ${totalMembers}`
+      : String(r.threshold);
   return {
     schema_id: r.id,
     name: r.name,
     version: r.version,
     owner: r.owner,
     attestor_set_id: r.attestor_set_id,
-    threshold,
+    threshold: thresholdStr,
     fee_routing_bps: r.fee_routing_bps,
     fee_routing_addr: r.fee_routing_addr ?? "",
     payload_shape_hash: r.payload_shape_hash,
     description: "",
     attestation_count: r.attestation_count,
-    recent_attestations: [],
   };
 }
 
-export async function getSchemas(): Promise<Schema[]> {
+// `opts.live: true` overrides the 60s Cache-Control on /v1/schemas
+// with a 6s revalidation window so the homepage Schemas card picks
+// up a freshly-registered schema within one polling cycle. The
+// /schemas page leaves opts unset → full 60s cache.
+export async function getSchemas(opts?: { live?: boolean }): Promise<Schema[]> {
   if (useMockApi) return mockData.schemas;
-  const raw = await fetchJson<Page<ApiSchemaResponse>>("/v1/schemas?limit=100");
+  const raw = await fetchJson<Page<ApiSchemaResponse>>(
+    "/v1/schemas?limit=100",
+    opts?.live ? { next: { revalidate: 6 } } : undefined,
+  );
   return raw.data.map((s) => adaptSchemaResponse(s));
+}
+
+// Schemas bound to a specific attestor set. Uses the
+// `?attestor_set_id=X` filter (ligate-api PR #45 Tier 1.2). Threshold
+// now ships on each row (ligate-api PR #52), so each schema renders
+// "{threshold}" out of the box. The set detail page passes the
+// member count if it wants "{threshold} of N" rendering.
+export async function getSchemasForSet(
+  attestorSetId: string,
+): Promise<Schema[]> {
+  if (useMockApi) {
+    return mockData.schemas.filter(
+      (s) => s.attestor_set_id === attestorSetId,
+    );
+  }
+  try {
+    const raw = await fetchJson<Page<ApiSchemaResponse>>(
+      `/v1/schemas?attestor_set_id=${encodeURIComponent(attestorSetId)}&limit=100`,
+    );
+    return raw.data.map((s) => adaptSchemaResponse(s));
+  } catch {
+    return [];
+  }
 }
 
 export async function getSchema(id: string): Promise<Schema | null> {
@@ -537,87 +1071,62 @@ export async function getSchema(id: string): Promise<Schema | null> {
   } catch {
     return null;
   }
-  // Resolve the real threshold by fetching the bound attestor set.
-  // List view skips this extra hop; detail view does the second
-  // roundtrip so the schema page renders `"M of N"` honestly.
-  let threshold = "0 of 0";
+  // Threshold itself ships on the schema row now (ligate-api PR #52);
+  // we only cross-fetch the attestor set to learn the *member count*
+  // for the "M of N" denominator. If that lookup fails, fall back to
+  // just rendering the M.
+  let totalMembers: number | undefined;
   try {
     const set = await fetchJson<ApiAttestorSetResponse>(
       `/v1/attestor-sets/${raw.attestor_set_id}`,
     );
-    threshold = `${set.threshold} of ${set.members.length}`;
+    totalMembers = set.members.length;
   } catch {
-    // Lookup failure leaves the placeholder. The chain guarantees a
-    // registered schema binds to a registered set; the only way this
-    // fails is a transient api hiccup, which doesn't warrant 502'ing
-    // the schema page.
+    // Transient api hiccup on the set lookup. Detail page still
+    // renders with just the threshold M (no denominator).
   }
-  return adaptSchemaResponse(raw, threshold);
+  return adaptSchemaResponse(raw, totalMembers);
 }
 
 // ---------------------------------------------------------------------
-// Attestations + attestor sets
+// Attestor set detail
 //
-// Mock-backed today. The real endpoints (`/v1/attestations`,
-// `/v1/attestations/{id}`, `/v1/attestor-sets/{id}`) flip per-endpoint
-// behind `USE_MOCK_API` as `ligate-api` ships them — see
-// ligate-io/ligate-explorer#8. `/v1/attestor-sets/{id}` already exists
-// (`getSchema` calls it); the attestation list + detail endpoints are
-// the api-side follow-up. Wire shapes confirmed against the chain's
-// REST surface land here when the real branch is enabled.
+// `getAttestations`, `getAttestation`, and `getAttestorSets` (plural)
+// were deleted in this cleanup round — the new wire shapes shipped in
+// ligate-api PR #39 deprecate them and no consumer references them.
+// The `AttestationItem` / `AttestorSetItem` fetchers above replace
+// them for both list and detail surfaces.
 // ---------------------------------------------------------------------
 
-export async function getAttestations(): Promise<Attestation[]> {
-  if (useMockApi) return mockData.attestations;
-  // List endpoint isn't shipped on ligate-api yet (point lookups only).
-  // Catch the 404 / network error and degrade to an empty list so the
-  // page renders its empty state instead of 500'ing. Tracked under
-  // ligate-io/ligate-explorer#8 (USE_MOCK_API flip checklist).
-  try {
-    const raw = await fetchJson<Page<Attestation>>(
-      "/v1/attestations?limit=100",
-    );
-    return raw.data;
-  } catch {
-    return [];
+// Detail endpoint returns the same shape as the list endpoint
+// (`AttestorSetItem`) per ligate-api#39. The older richer detail
+// (with `bound_schemas` + `attestation_count` denormalised onto the
+// row) is gone — callers cross-fetch schemas filtered by
+// attestor_set_id to recover the bound list, and use the per-set
+// attestations endpoint for the count.
+export async function getAttestorSet(
+  id: string,
+): Promise<AttestorSetItem | null> {
+  if (useMockApi) {
+    const m = mockData.attestorSets.find((s) => s.attestor_set_id === id);
+    if (!m) return null;
+    return {
+      id: m.attestor_set_id,
+      members: m.members,
+      threshold: m.threshold,
+      schema_count: m.schema_count,
+      // Mock fixtures don't track a real registered_at — synthesize
+      // a sentinel block_height of 0 so the detail page's "registered
+      // in #N" copy still has a number to render under USE_MOCK_API.
+      registered_at: {
+        block_height: 0,
+        tx_hash: "",
+        timestamp: "",
+      },
+    };
   }
-}
-
-export async function getAttestation(id: string): Promise<Attestation | null> {
-  if (useMockApi)
-    return (
-      mockData.attestations.find((a) => a.attestation_id === id) ?? null
-    );
   try {
-    return await fetchJson<Attestation>(`/v1/attestations/${id}`);
-  } catch {
-    return null;
-  }
-}
-
-export async function getAttestorSets(): Promise<AttestorSet[]> {
-  if (useMockApi) return mockData.attestorSets;
-  // Same story as getAttestations: list endpoint isn't shipped yet
-  // (only `/v1/attestor-sets/{id}` point lookups exist, which `getSchema`
-  // uses to resolve the threshold). Degrade to empty so the list page
-  // renders its empty state.
-  try {
-    const raw = await fetchJson<Page<AttestorSet>>(
-      "/v1/attestor-sets?limit=100",
-    );
-    return raw.data;
-  } catch {
-    return [];
-  }
-}
-
-export async function getAttestorSet(id: string): Promise<AttestorSet | null> {
-  if (useMockApi)
-    return (
-      mockData.attestorSets.find((s) => s.attestor_set_id === id) ?? null
-    );
-  try {
-    return await fetchJson<AttestorSet>(`/v1/attestor-sets/${id}`);
+    return await fetchJson<AttestorSetItem>(`/v1/attestor-sets/${id}`);
   } catch {
     return null;
   }
@@ -629,6 +1138,31 @@ export async function getAddress(addr: string): Promise<AddressDetail> {
     `/v1/addresses/${addr}`,
   );
   return adaptAddressSummary(raw);
+}
+
+// Paginated address tx history (ligate-api PR #52). Same envelope +
+// cursor as /v1/txs. Returns rows where the address is the sender
+// (any kind) OR a transfer participant (from / to). Empty address
+// returns {data: [], pagination: {next: null}} with 200, not 404.
+export async function getAddressTxs(
+  addr: string,
+  cursor?: string,
+  limit = 20,
+): Promise<PageResult<Tx>> {
+  if (useMockApi) return { items: [], nextCursor: null };
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (cursor) qs.set("before", cursor);
+  try {
+    const raw = await fetchJson<Page<ApiTxResponse>>(
+      `/v1/addresses/${encodeURIComponent(addr)}/txs?${qs}`,
+    );
+    return {
+      items: raw.data.map(adaptTxResponse),
+      nextCursor: raw.pagination.next,
+    };
+  } catch {
+    return { items: [], nextCursor: null };
+  }
 }
 
 export async function getDripStatus(addr: string): Promise<DripStatus> {
