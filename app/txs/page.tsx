@@ -85,8 +85,17 @@ export default async function TxsPage({
     { label: 'Pending', value: pending, color: 'var(--color-amber)' },
   ]
 
-  const blocksHigh = Math.max(...all.map((t) => t.height))
-  const blocksLow = Math.min(...all.map((t) => t.height))
+  // Empty-state guard: Math.max(...[]) returns -Infinity, Math.min(...[])
+  // returns +Infinity. If /v1/txs returns zero rows (early bootstrap,
+  // api failure, freshly genesized chain) the original code would
+  // render "-Infinity recent blocks" in the hero copy below. Guard so
+  // the page renders sensibly when the sample is empty.
+  const blockSpan =
+    all.length > 0
+      ? Math.max(...all.map((t) => t.height)) -
+        Math.min(...all.map((t) => t.height)) +
+        1
+      : 0
 
   return (
     <>
@@ -113,7 +122,7 @@ export default async function TxsPage({
           }}
         >
           {all.length.toLocaleString()} transactions across{' '}
-          {blocksHigh - blocksLow + 1} recent blocks. Filter by module, follow the
+          {blockSpan} recent blocks. Filter by module, follow the
           lifecycle, click any hash to inspect.
         </p>
       </div>

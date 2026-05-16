@@ -59,8 +59,15 @@ export default async function BlocksPage({
 
   const rows = pageResult.items
 
+  // Empty-state guard: if /v1/blocks returns zero rows (chain freshly
+  // genesized, indexer behind, transient api failure), `all[0]` is
+  // undefined and the original `all[0].height.toLocaleString()` would
+  // throw. Render "—" so the page degrades instead of crashing.
+  const latestBlockLabel =
+    all[0]?.height != null ? '#' + all[0].height.toLocaleString() : '—'
+
   const stats = [
-    { label: 'Latest block', value: '#' + all[0].height.toLocaleString(), serif: true },
+    { label: 'Latest block', value: latestBlockLabel, serif: true },
     { label: 'Indexed blocks', value: indexedBlocks.toLocaleString(), serif: true },
     { label: 'Avg txs / block', value: avgTxs, serif: true },
     {
