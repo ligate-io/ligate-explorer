@@ -222,6 +222,12 @@ export interface NextBlockEta {
 }
 
 // /v1/search response. Discriminated union on `kind`.
+//
+// `not_found` is a definitive answer from the api (well-formed query,
+// no match). `error` is a client-synthesized fallback when the call
+// itself failed (network down, api 5xx, unparseable body) — distinct
+// so the UI can tell the user "your query was probably fine, our
+// indexer is hiccuping" instead of the misleading "Nothing matched."
 export type SearchResult =
   | { kind: 'block'; block_height: number }
   | { kind: 'tx'; tx_hash: string }
@@ -230,6 +236,7 @@ export type SearchResult =
   | { kind: 'attestor_set'; attestor_set_id: string }
   | { kind: 'attestation'; schema_id: string; payload_hash: string }
   | { kind: 'not_found'; query: string }
+  | { kind: 'error'; message: string }
 
 // One row from /v1/attestations or its by-schema / by-set variants.
 // The new shape has nested `submitted_at` (block_height + tx_hash +
