@@ -1,5 +1,3 @@
-import { Suspense } from 'react'
-import Link from 'next/link'
 import {
   getAttestationItems,
   getAttestationsDaily,
@@ -11,51 +9,58 @@ import {
   getStatsTotals,
   getTxRateDaily,
 } from '@/lib/api'
-import { trunc } from '@/lib/format'
 import { BlockTickerCard } from '@/components/block-ticker-card'
 import {
   AttestorSetsCard,
   DailyAttestationsCard,
   FeeTrackerCard,
-  StatsStrip,
   SupplyCard,
   Tx24hCard,
 } from '@/components/dashboard'
-import { AutoRefresh } from '@/components/auto-refresh'
 import { HeroBackdrop } from '@/components/hero-backdrop'
-import { SkelBlock, SkelCard, SkelHomeTableCard } from '@/components/skeleton'
-import { Eyebrow, FrameCard } from '@/components/ui'
-import { BlocksTable, TxsTable } from '@/components/tables'
+import {
+  LiveAttestationsCard,
+  LiveLatestBlocks,
+  LiveLatestTxs,
+  LiveSchemasCard,
+  LiveStatsStrip,
+} from '@/components/live-cards'
+import { Eyebrow } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// Streaming home page. The shell (AutoRefresh + hero text +
-// backdrop) renders synchronously — there are no awaits at this
-// scope, so the user gets first paint in <100ms even on a cold
-// server. Each downstream row is an async component wrapped in
-// <Suspense>; rows arrive independently as their data resolves.
+// Home page. Renders as a single async function. All five data
+// fetches resolve at the TOP via Promise.all (parallel + Next-deduped
+// for shared URLs). Each row's render is its own async helper, but
+// we pre-await them here too so they enter the JSX tree as already-
+// resolved React elements — no suspending children inside the page.
 //
-// Next.js dedupes identical fetches within a single render, so
-// getInfo() / getStatsTotals() called from multiple rows hit the
-// api once per render even though each row declares its own awaits.
+// Why this matters:
+//   The home page used to ride on a route-wide `router.refresh()` tick
+//   (AutoRefresh component, now deleted). That re-ran every server
+//   component on every cycle and made the page feel like it was
+//   refreshing as a whole on each new block. Now the live cards are
+//   their own client components (see components/live-cards.tsx), each
+//   polling its own endpoint on a 6s cadence. The server pass renders
+//   the initial data — so first paint is fully populated, no skeleton
+//   flicker — and from then on only the live cards re-render. Static
+//   cards (Hero, Supply, 24h tx, Daily attestations, Attestor sets,
+//   Fee tracker) stay mounted and never re-paint.
 //
-// Caching:
-//   - Server fetches honour the api's Cache-Control TTLs (set in
-//     ligate-api PR #49), except where rows pass `live: true` to
-//     getSchemas / getAttestationItems / getAttestorSetItems —
-//     those override the longer 30-60s TTLs down to 6s so the
-//     polling-driven re-renders see fresh data each cycle.
-//   - AutoRefresh's router.refresh() invalidates the route cache
-//     so the streaming kicks off again from scratch every 6s.
-export default function HomePage() {
+// First-paint skeleton lives in `app/loading.tsx` and shows only on
+// hard navigation TO this route (where HomePage hasn't resolved yet),
+// not on tab return / poll cycles.
+export default async function HomePage() {
+  const [stats, row1, row2, row3, row4] = await Promise.all([
+    StatsStripData(),
+    Row1(),
+    Row2(),
+    Row3(),
+    Row4(),
+  ])
   return (
     <>
-      {/* Polls /v1/info indirectly via router.refresh() so the block
-          number, latest blocks, and latest txs advance without a
-          manual reload. Pauses on hidden tabs. */}
-      <AutoRefresh intervalMs={6000} />
-
       {/*
         Hero atmosphere band. The hero text + the stats strip + the
         first dashboard widget row sit on top of a blurred spirograph
@@ -67,34 +72,16 @@ export default function HomePage() {
         <HeroBackdrop />
         <HeroText />
 
-        {/* Stats strip — its own Suspense so it streams in
-            independently of Row 1 below. */}
         <div style={{ position: 'relative', zIndex: 1, marginBottom: 24 }}>
-          <Suspense fallback={<StatsStripSkeleton />}>
-            <StatsStripData />
-          </Suspense>
+          {stats}
         </div>
 
-        {/* Row 1: block ticker / supply / 24h txs */}
-        <Suspense fallback={<Row1Skeleton />}>
-          <Row1 />
-        </Suspense>
+        {row1}
       </div>
 
-      {/* Row 2: attestations heatmap / sequencers / fees. */}
-      <Suspense fallback={<Row2Skeleton />}>
-        <Row2 />
-      </Suspense>
-
-      {/* Row 3: schemas + latest attestations. */}
-      <Suspense fallback={<Row3Skeleton />}>
-        <Row3 />
-      </Suspense>
-
-      {/* Row 4: blocks + txs. */}
-      <Suspense fallback={<Row4Skeleton />}>
-        <Row4 />
-      </Suspense>
+      {row2}
+      {row3}
+      {row4}
     </>
   )
 }
@@ -155,8 +142,9 @@ function HeroText() {
 }
 
 // ---------------------------------------------------------------------
-// Streaming rows — each does its own Promise.all; Next dedupes
-// duplicate fetch URLs across rows.
+// Server-side row helpers — each does its own Promise.all (Next dedupes
+// duplicate fetch URLs across rows). They hand initial data to the
+// live client components, which take over polling from there.
 // ---------------------------------------------------------------------
 
 async function StatsStripData() {
@@ -164,11 +152,13 @@ async function StatsStripData() {
     getInfo(),
     getStatsTotals().catch(() => null),
   ])
-  // StatsStrip's "LGT supply" tile prefers the live totals supply
-  // over the env-fallback that getInfo defaults to. Splice it in.
+  // LiveStatsStrip's first paint is whatever we hand it; from then on
+  // it polls /v1/info + /v1/stats/totals itself and splices the same
+  // supply field in client-side. Mirror that splice here so the SSR
+  // render and the first client-poll render produce identical output.
   return (
-    <StatsStrip
-      info={{
+    <LiveStatsStrip
+      initial={{
         ...info,
         supply_nano: totals?.total_supply_nano ?? info.supply_nano,
       }}
@@ -200,12 +190,19 @@ async function Row1() {
         marginBottom: 24,
       }}
     >
-      <BlockTickerCard latestBlock={info.latest_block} />
+      {/* Live: BlockTickerCard self-polls /v1/stats/next-block-eta
+          and uses eta.last_block_height for display. `initialBlock` is
+          only the SSR seed; once the first eta hit lands it's replaced. */}
+      <BlockTickerCard initialBlock={info.latest_block} />
+      {/* Static: supply changes only on treasury movements, no need
+          to poll. SSR value is good until the next route navigation. */}
       <SupplyCard
         totalNano={totals?.total_supply_nano ?? info.supply_nano}
         treasuryNano={totals?.treasury_balance_nano}
         treasuryAddress={totals?.treasury_address}
       />
+      {/* Static: 7-day rollup, refreshes once per day worth of data.
+          Don't burn polling cycles on it. */}
       <Tx24hCard bars={txBars7d} />
     </div>
   )
@@ -214,8 +211,10 @@ async function Row1() {
 async function Row2() {
   const [attestationsDaily, attestorSetsPage] = await Promise.all([
     getAttestationsDaily(30),
-    getAttestorSetItems(undefined, 5, { live: true }),
+    getAttestorSetItems(undefined, 5),
   ])
+  // All three cards here are static (heatmap is 30-day, attestor sets
+  // change rarely, fee tracker is stub-only). No live wrappers needed.
   return (
     <div
       className="grid-3"
@@ -230,470 +229,32 @@ async function Row2() {
 
 async function Row3() {
   const [schemas, attestationsPage] = await Promise.all([
-    getSchemas({ live: true }),
-    getAttestationItems(undefined, 5, { live: true }),
+    getSchemas(),
+    getAttestationItems(undefined, 5),
   ])
-  const schemaList = schemas.slice(0, 5)
-  const attestationItems = attestationsPage.items
   return (
     <section
       className="grid-2"
       style={{ gap: 24, alignItems: 'stretch', marginBottom: 24 }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 14,
-          }}
-        >
-          <Eyebrow>Schemas</Eyebrow>
-          <Link
-            href="/schemas"
-            className="mono link"
-            style={{
-              fontSize: 11,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-            }}
-          >
-            View all →
-          </Link>
-        </div>
-        <FrameCard padding={0} style={{ flex: 1 }} scrollX>
-          <table className="tbl tab-num tbl-compact">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Threshold</th>
-                <th>Attestations</th>
-              </tr>
-            </thead>
-            <tbody>
-              {schemaList.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={3}
-                    style={{
-                      padding: '32px 22px',
-                      textAlign: 'center',
-                      color: 'var(--color-subtle)',
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{ fontSize: 11, letterSpacing: '0.18em' }}
-                    >
-                      No schemas indexed yet
-                    </span>
-                  </td>
-                </tr>
-              ) : (
-                schemaList.map((s) => (
-                  <tr key={s.schema_id}>
-                    <td>
-                      <Link
-                        href={`/schema/${s.schema_id}`}
-                        style={{ display: 'block' }}
-                      >
-                        <div
-                          className="serif"
-                          style={{
-                            fontSize: 14,
-                            color: 'var(--color-ink)',
-                            lineHeight: 1.1,
-                          }}
-                        >
-                          {s.name}
-                        </div>
-                        <div
-                          className="mono"
-                          style={{
-                            fontSize: 9,
-                            color: 'var(--color-subtle)',
-                            marginTop: 2,
-                            letterSpacing: '0.08em',
-                          }}
-                        >
-                          v{s.version} · {trunc(s.schema_id, 6, 4)}
-                        </div>
-                      </Link>
-                    </td>
-                    <td>
-                      <span
-                        className="mono"
-                        style={{ color: 'var(--color-accent)' }}
-                      >
-                        {s.threshold}
-                      </span>
-                    </td>
-                    <td className="mono tab-num">
-                      {s.attestation_count.toLocaleString()}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </FrameCard>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 14,
-          }}
-        >
-          <Eyebrow>Latest attestations</Eyebrow>
-          <Link
-            href="/attestations"
-            className="mono link"
-            style={{
-              fontSize: 11,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-            }}
-          >
-            View all →
-          </Link>
-        </div>
-        <FrameCard padding={0} style={{ flex: 1 }} scrollX>
-          <table className="tbl tab-num tbl-compact">
-            <thead>
-              <tr>
-                <th>Payload</th>
-                <th>Block</th>
-                <th>Submitter</th>
-                <th>Sigs</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attestationItems.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={4}
-                    style={{
-                      padding: '32px 22px',
-                      textAlign: 'center',
-                      color: 'var(--color-subtle)',
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{ fontSize: 11, letterSpacing: '0.18em' }}
-                    >
-                      No attestations indexed yet
-                    </span>
-                  </td>
-                </tr>
-              ) : (
-                attestationItems.map((a) => (
-                  <tr key={a.id}>
-                    <td>
-                      <Link
-                        href={`/attestation/${a.id}`}
-                        className="h-mono"
-                        style={{ display: 'block' }}
-                        title={a.payload_hash}
-                      >
-                        {trunc(a.payload_hash, 6, 4)}
-                      </Link>
-                    </td>
-                    <td>
-                      <Link
-                        href={`/blocks/${a.submitted_at.block_height}`}
-                        className="mono"
-                        style={{ color: 'var(--color-muted)' }}
-                      >
-                        #{a.submitted_at.block_height}
-                      </Link>
-                    </td>
-                    <td>
-                      <Link
-                        href={`/address/${a.submitter}`}
-                        className="h-mono"
-                      >
-                        {trunc(a.submitter, 6, 4)}
-                      </Link>
-                    </td>
-                    <td>
-                      <span
-                        className="mono tab-num"
-                        style={{ color: 'var(--color-accent)' }}
-                      >
-                        {a.signature_count}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </FrameCard>
-      </div>
+      <LiveSchemasCard initial={schemas.slice(0, 5)} />
+      <LiveAttestationsCard initial={attestationsPage.items} />
     </section>
   )
 }
 
 async function Row4() {
-  const [allBlocks, allTxs] = await Promise.all([
-    getLatestBlocks(20),
-    getLatestTxs(20),
+  const [blocks, txs] = await Promise.all([
+    getLatestBlocks(10),
+    getLatestTxs(10),
   ])
-  const blocks = allBlocks.slice(0, 10)
-  const txs = allTxs.slice(0, 10)
   return (
     <section
       className="grid-2"
       style={{ gap: 24, alignItems: 'stretch' }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 14,
-          }}
-        >
-          <Eyebrow>Latest blocks</Eyebrow>
-          <Link
-            href="/blocks"
-            className="mono link"
-            style={{
-              fontSize: 11,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-            }}
-          >
-            View all →
-          </Link>
-        </div>
-        <FrameCard padding={0} style={{ flex: 1 }} scrollX>
-          <BlocksTable rows={blocks} compact />
-        </FrameCard>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 14,
-          }}
-        >
-          <Eyebrow>Latest transactions</Eyebrow>
-          <Link
-            href="/txs"
-            className="mono link"
-            style={{
-              fontSize: 11,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-            }}
-          >
-            View all →
-          </Link>
-        </div>
-        <FrameCard padding={0} style={{ flex: 1 }} scrollX>
-          <TxsTable rows={txs} showBlock={false} compact />
-        </FrameCard>
-      </div>
-    </section>
-  )
-}
-
-// ---------------------------------------------------------------------
-// Suspense fallback skeletons. Each mirrors the EXACT silhouette of
-// the row it replaces — same grid columns, same eyebrow placement,
-// same FrameCard chrome, same table-row count — so swap-in doesn't
-// shift layout.
-// ---------------------------------------------------------------------
-
-// StatsStrip: full-width FrameCard holding 6 tiles in a flex row.
-// The real strip is ~80px tall (label + value per tile, padding 14).
-function StatsStripSkeleton() {
-  return (
-    <FrameCard padding={0} style={{ background: 'var(--color-surface)' }}>
-      <div style={{ display: 'flex' }}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              padding: '18px 22px',
-              borderRight:
-                i < 5 ? '1px solid var(--color-line)' : 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-            }}
-          >
-            <SkelBlock width={70} height={9} />
-            <SkelBlock width="60%" height={18} />
-          </div>
-        ))}
-      </div>
-    </FrameCard>
-  )
-}
-
-// Row 1: block ticker / supply / 24h txs — three FrameCards at
-// roughly the same height the real cards settle into.
-function Row1Skeleton() {
-  return (
-    <div
-      className="grid-3"
-      style={{
-        position: 'relative',
-        zIndex: 1,
-        gap: 24,
-        marginBottom: 24,
-      }}
-    >
-      {Array.from({ length: 3 }).map((_, i) => (
-        <SkelCard key={i} height={200}>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 14,
-            }}
-          >
-            <SkelBlock width={90} height={10} />
-            <SkelBlock width="50%" height={24} />
-            <div style={{ marginTop: 12 }}>
-              <SkelBlock width="100%" height={36} />
-            </div>
-          </div>
-        </SkelCard>
-      ))}
-    </div>
-  )
-}
-
-// Row 2: daily attestations heatmap / attestor sets / fee tracker.
-// Heatmap silhouette = 5×6 grid of cells matching the real
-// DailyAttestationsCard. Others get list-style skeletons.
-function Row2Skeleton() {
-  return (
-    <div
-      className="grid-3"
-      style={{ gap: 24, marginBottom: 24 }}
-    >
-      <SkelCard height={220}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginBottom: 16,
-          }}
-        >
-          <SkelBlock width={100} height={10} />
-          <SkelBlock width={50} height={10} />
-        </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
-            gap: 3,
-          }}
-        >
-          {Array.from({ length: 30 }).map((_, i) => (
-            <SkelBlock key={i} height={18} />
-          ))}
-        </div>
-      </SkelCard>
-      <SkelCard height={220}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginBottom: 16,
-          }}
-        >
-          <SkelBlock width={90} height={10} />
-          <SkelBlock width={50} height={10} />
-        </div>
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '10px 0',
-              borderBottom: i < 3 ? '1px solid var(--color-line)' : 0,
-            }}
-          >
-            <SkelBlock width="55%" height={11} />
-            <SkelBlock width={40} height={11} />
-          </div>
-        ))}
-      </SkelCard>
-      <SkelCard height={220}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <SkelBlock width={70} height={10} />
-          <SkelBlock width="80%" height={26} />
-          <SkelBlock width="100%" height={6} />
-          <div style={{ display: 'flex', gap: 14 }}>
-            <SkelBlock width="33%" height={28} />
-            <SkelBlock width="33%" height={28} />
-            <SkelBlock width="33%" height={28} />
-          </div>
-        </div>
-      </SkelCard>
-    </div>
-  )
-}
-
-// Row 3: schemas + latest attestations. Real layout puts eyebrow +
-// "View all →" ABOVE the FrameCard, with a 5-row compact table
-// inside. SkelHomeTableCard mirrors that exactly.
-function Row3Skeleton() {
-  return (
-    <section
-      className="grid-2"
-      style={{ gap: 24, alignItems: 'stretch', marginBottom: 24 }}
-    >
-      <SkelHomeTableCard
-        eyebrowWidth={70}
-        headers={['Name', 'Threshold', 'Attestations']}
-        rows={5}
-      />
-      <SkelHomeTableCard
-        eyebrowWidth={130}
-        headers={['Payload', 'Block', 'Submitter', 'Sigs']}
-        rows={5}
-      />
-    </section>
-  )
-}
-
-// Row 4: latest blocks + latest transactions. Same eyebrow-above
-// pattern, 10 compact rows each so heights match Row 3 visually via
-// alignItems:stretch on the parent grid.
-function Row4Skeleton() {
-  return (
-    <section
-      className="grid-2"
-      style={{ gap: 24, alignItems: 'stretch' }}
-    >
-      <SkelHomeTableCard
-        eyebrowWidth={110}
-        headers={['Height', 'Hash', 'Time', 'Txs']}
-        rows={10}
-      />
-      <SkelHomeTableCard
-        eyebrowWidth={150}
-        headers={['Hash', 'Sender', 'Type', 'Fee', 'Time']}
-        rows={10}
-      />
+      <LiveLatestBlocks initial={blocks} />
+      <LiveLatestTxs initial={txs} />
     </section>
   )
 }

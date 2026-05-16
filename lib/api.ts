@@ -51,9 +51,14 @@ const fallbackLgtSupplyNano =
 // layer DOES honor Cache-Control, but it sits behind the RSC cache,
 // so without opting in via `next: { revalidate }` we never reach the
 // CDN. Each fetcher passes its endpoint's TTL via the helper below;
-// `live: true` overrides shorten that to 6s for AutoRefresh-driven
-// homepage cards; `cache: 'no-store'` opts out entirely for fully
-// dynamic reads (drip status, search).
+// `cache: 'no-store'` opts out entirely for fully dynamic reads
+// (drip status, search).
+//
+// The "live: 6s" override that used to live here is gone — the home
+// page no longer SSR-polls via `router.refresh()`. Its live cards
+// fetch directly from the browser (see `lib/api-browser.ts` +
+// `components/live-cards.tsx`) so the SSR cache TTLs only apply on
+// hard navigation now.
 const TTL = {
   INFO: 5,
   STATS_TOTALS: 10,
@@ -74,20 +79,15 @@ const TTL = {
   SCHEMA_DETAIL: 60,
   ADDRESS_SUMMARY: 30,
   ADDRESS_TXS: 30,
-  // Live override for homepage cards that AutoRefresh polls every ~6s.
-  // Shorter than any endpoint's documented TTL so a freshly-registered
-  // attestor set / schema / attestation surfaces within one cycle.
-  LIVE: 6,
 } as const;
 
 /**
- * Build a `next: { revalidate }` init object honoring `opts.live` if
- * present (shortens to TTL.LIVE). Pass the resulting init to
- * `fetchJson`. Pass `undefined` instead if you want `cache: 'no-store'`
- * — see `searchByQuery` / `getDripStatus` for examples.
+ * Build a `next: { revalidate }` init object for `fetchJson`. Pass
+ * `undefined` instead if you want `cache: 'no-store'` — see
+ * `searchByQuery` / `getDripStatus` for examples.
  */
-function ttl(seconds: number, opts?: { live?: boolean }): RequestInit {
-  return { next: { revalidate: opts?.live ? TTL.LIVE : seconds } };
+function ttl(seconds: number): RequestInit {
+  return { next: { revalidate: seconds } };
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -101,8 +101,8 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 /**
  * Fetch directly against the chain RPC (rpc.ligate.io), bypassing the
  * indexer api. Used for things the api doesn't surface: live total
- * supply, attestor-set state by id, etc. Same no-cache semantics so
- * AutoRefresh on the home page picks up movements.
+ * supply, attestor-set state by id, etc. Always no-store so the
+ * homepage's per-card pollers see fresh chain state on every hit.
  */
 async function fetchChain<T>(path: string): Promise<T> {
   const res = await fetch(`${rpcBase}${path}`, { cache: "no-store" });
@@ -701,15 +701,14 @@ interface AttestorSetItemPage {
   pagination: { next: string | null; limit: number };
 }
 
-// `opts.live: true` overrides the api's Cache-Control (30s on the
-// attestations list) with a 6s revalidation window so the homepage's
-// AutoRefresh-driven re-render actually picks up new attestations
-// within one polling cycle. Detail pages and the /attestations list
-// page leave it unset → they get the full 30s cache benefit.
+// Server-side fetcher for /v1/attestations. Used for hard navigation
+// to the /attestations list page (which paginates) and for the home
+// page's first paint of the live attestations card — once the home
+// page hydrates, the card fetches directly from the browser via
+// `fetchAttestationsFromBrowser` and the SSR cache TTL stops mattering.
 export async function getAttestationItems(
   cursor?: string,
   limit = 20,
-  opts?: { live?: boolean },
 ): Promise<PageResult<AttestationItem>> {
   if (useMockApi) return { items: [], nextCursor: null };
   const qs = new URLSearchParams({ limit: String(limit) });
@@ -717,7 +716,7 @@ export async function getAttestationItems(
   try {
     const raw = await fetchJson<AttestationItemPage>(
       `/v1/attestations?${qs}`,
-      ttl(TTL.ATTESTATIONS_LIST, opts),
+      ttl(TTL.ATTESTATIONS_LIST),
     );
     return { items: raw.data, nextCursor: raw.pagination.next };
   } catch {
@@ -739,13 +738,12 @@ export async function getAttestationItem(
   }
 }
 
-// `opts.live: true` overrides the 60s Cache-Control on /v1/attestor-sets
-// with a 6s revalidation window — same rationale as
-// getAttestationItems. Used by the homepage's attestor-sets card.
+// Server-side fetcher for /v1/attestor-sets. SSR-only — the homepage's
+// attestor-sets card is static (sets change rarely), so there's no
+// browser-side poller mirror for this endpoint today.
 export async function getAttestorSetItems(
   cursor?: string,
   limit = 20,
-  opts?: { live?: boolean },
 ): Promise<PageResult<AttestorSetItem>> {
   if (useMockApi) return { items: [], nextCursor: null };
   const qs = new URLSearchParams({ limit: String(limit) });
@@ -753,7 +751,7 @@ export async function getAttestorSetItems(
   try {
     const raw = await fetchJson<AttestorSetItemPage>(
       `/v1/attestor-sets?${qs}`,
-      ttl(TTL.ATTESTOR_SETS_LIST, opts),
+      ttl(TTL.ATTESTOR_SETS_LIST),
     );
     return { items: raw.data, nextCursor: raw.pagination.next };
   } catch {
@@ -1099,15 +1097,15 @@ function adaptSchemaResponse(
   };
 }
 
-// `opts.live: true` overrides the 60s Cache-Control on /v1/schemas
-// with a 6s revalidation window so the homepage Schemas card picks
-// up a freshly-registered schema within one polling cycle. The
-// /schemas page leaves opts unset → full 60s cache.
-export async function getSchemas(opts?: { live?: boolean }): Promise<Schema[]> {
+// Server-side fetcher for /v1/schemas. Used for the /schemas list
+// page and for the home page's first paint — after hydration the
+// home page's schemas card polls directly from the browser via
+// `fetchSchemasFromBrowser`.
+export async function getSchemas(): Promise<Schema[]> {
   if (useMockApi) return mockData.schemas;
   const raw = await fetchJson<Page<ApiSchemaResponse>>(
     "/v1/schemas?limit=100",
-    ttl(TTL.SCHEMAS_LIST, opts),
+    ttl(TTL.SCHEMAS_LIST),
   );
   return raw.data.map((s) => adaptSchemaResponse(s));
 }

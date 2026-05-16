@@ -12,6 +12,9 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@fontsource/instrument-serif": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
     "@vercel/analytics": "^2.0.1",
     "next": "^15.5.15",
     "react": "^19.2.5",

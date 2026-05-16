@@ -170,9 +170,13 @@ export function BlocksTable({
   const router = useRouter()
   // Callers wrap us in a FrameCard with `scrollX` to opt in to
   // horizontal-scroll behaviour on narrow viewports — see
-  // components/ui.tsx FrameCard.scrollX.
+  // components/ui.tsx FrameCard.scrollX. The `blocks-compact` marker
+  // class lets globals.css hide the Hash column on phones so the
+  // remaining 3 columns (Height / Time / Txs) fit without scroll.
   return (
-    <table className={`tbl tab-num${compact ? ' tbl-compact' : ''}`}>
+    <table
+      className={`tbl tab-num${compact ? ' tbl-compact blocks-compact' : ''}`}
+    >
       <thead>
         <tr>
           <th>Height</th>
@@ -239,9 +243,13 @@ export function TxsTable({
 }) {
   const router = useRouter()
   // See BlocksTable: callers wrap us in `<FrameCard scrollX>` to opt
-  // in to mobile horizontal scrolling.
+  // in to mobile horizontal scrolling. The `txs-compact` marker
+  // class lets globals.css hide Sender + Fee on phones so the
+  // remaining 3 columns (Hash / Type / Time) fit without scroll.
   return (
-    <table className={`tbl tab-num${compact ? ' tbl-compact' : ''}`}>
+    <table
+      className={`tbl tab-num${compact ? ' tbl-compact txs-compact' : ''}`}
+    >
       <thead>
         <tr>
           <th>Hash</th>

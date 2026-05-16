@@ -60,7 +60,15 @@ export function Pagination({
         {onFirstPage ? (
           <span
             className="btn"
-            style={{ padding: '8px 14px', fontSize: 10, opacity: 0.4 }}
+            aria-disabled="true"
+            title="Already on first page"
+            style={{
+              padding: '8px 14px',
+              fontSize: 10,
+              opacity: 0.4,
+              pointerEvents: 'none',
+              cursor: 'not-allowed',
+            }}
           >
             ← prev
           </span>
@@ -88,7 +96,15 @@ export function Pagination({
         {noMorePages ? (
           <span
             className="btn"
-            style={{ padding: '8px 14px', fontSize: 10, opacity: 0.4 }}
+            aria-disabled="true"
+            title="No more pages"
+            style={{
+              padding: '8px 14px',
+              fontSize: 10,
+              opacity: 0.4,
+              pointerEvents: 'none',
+              cursor: 'not-allowed',
+            }}
           >
             next →
           </span>

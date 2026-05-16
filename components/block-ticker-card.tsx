@@ -11,51 +11,58 @@ const apiBase = (
   process.env.NEXT_PUBLIC_API_URL ?? 'https://api.ligate.io'
 ).replace(/\/+$/, '')
 
-// Live block-ticker card. Two signals feed it:
+// Live block-ticker card.
 //
-//   1. `latestBlock` prop, refreshed by `<AutoRefresh intervalMs={6000}/>`
-//      via router.refresh() → the SSR-side getInfo(). This is our
-//      ground truth for "a new block landed" — when the prop bumps,
-//      we reset the timer to 0 from the wall-clock instant we observe
-//      the bump.
-//   2. /v1/stats/next-block-eta polled every 10s, which gives us the
-//      measured `mean_block_interval_secs` (the bar's full duration).
-//      We don't trust eta.last_block_timestamp for the timer because
-//      the indexer can lag the chain by 10+s, which would pin the
-//      bar at 100% forever even when blocks are landing on schedule.
+// Now fully self-polling — was previously driven by `router.refresh()`
+// on the home page (AutoRefresh component, removed). The displayed
+// height comes from `eta.last_block_height` once the first eta poll
+// resolves; until then we render `initialBlock`, the value the server
+// passed in during SSR. The StatsStrip is also a self-polling client
+// component now, so the two surfaces may transiently drift by one
+// block during the few hundred ms between their cache windows; on a
+// ~6s slot chain that's perceptually invisible and converges within
+// one cycle.
 //
-// Height shown is `max(latestBlock, eta.last_block_height)` so the
-// card never reads stale relative to the StatsStrip's "Latest block"
-// tile.
-export function BlockTickerCard({ latestBlock }: { latestBlock: number }) {
+// Bar timer resets on EVERY displayed-height change via React's
+// official "compare-in-render + setState" pattern (refs track previous
+// height; the render-time check schedules a state update; React
+// batches it with the same render). More reliable than useEffect for
+// prop-driven resets because it doesn't depend on commit timing or
+// effect order, and it fires correctly even if the component remounts
+// (the ref re-initializes to the new height, no false bump).
+//
+// Eta polling cadence (4s) is shorter than the api's 5s
+// Cache-Control window so we always pick up the freshest value on the
+// next interval after a slot lands.
+export function BlockTickerCard({ initialBlock }: { initialBlock: number }) {
   const [eta, setEta] = useState<NextBlockEta | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  // Wall-clock instant we last "saw" a new block. Reset by the two
-  // signals above. Initialised to mount time — wrong by up to one
-  // mean_interval, but the bar self-corrects as soon as the next
-  // bump arrives.
-  const lastBumpAt = useRef(Date.now())
-  // Highest block we've observed across both signals. Used to detect
-  // bumps without re-running the reset for stale prop values.
-  const lastSeenHeight = useRef(latestBlock)
+  const [bumpAt, setBumpAt] = useState(() => Date.now())
 
-  // SSR-side bump detector: the page polls /v1/info every 6s; when
-  // it returns a higher height, the prop bumps and we reset the
-  // timer to "now" (we don't have an exact landing timestamp from
-  // SSR, but it's at most 6s old, which is within the bar's tick
-  // resolution).
+  // Displayed height: eta wins once it's loaded; before then we render
+  // the server-rendered initial value. Either way it's the source of
+  // truth for the bar reset below.
+  const displayedHeight = eta?.last_block_height ?? initialBlock
+
+  // Render-time prop comparison. When the displayed height changes,
+  // schedule a state update for bumpAt; React batches it into this
+  // same render.
+  const prevHeightRef = useRef(displayedHeight)
+  if (displayedHeight !== prevHeightRef.current) {
+    prevHeightRef.current = displayedHeight
+    setBumpAt(Date.now())
+  }
+
+  // 100ms local tick for the bar progress + countdown.
   useEffect(() => {
-    if (latestBlock > lastSeenHeight.current) {
-      lastSeenHeight.current = latestBlock
-      lastBumpAt.current = Date.now()
-    }
-  }, [latestBlock])
+    const id = setInterval(() => setNow(Date.now()), 100)
+    return () => clearInterval(id)
+  }, [])
 
-  // Eta polling: every 10s. When eta knows about a newer block than
-  // we do, reset the timer using the eta's `last_block_timestamp` if
-  // it's recent (within ~30s of now), or "just observed" otherwise.
-  // The 30s window keeps us honest when the indexer is heavily
-  // lagging — better to under-report elapsed than to pin the bar.
+  // Eta polling: every 4s, plus an immediate fetch on mount so the
+  // bar timer locks onto the real `last_block_height` quickly
+  // (otherwise we'd be reading the initialBlock prop for up to 4s
+  // before the first eta hit). Pauses on hidden tabs.
   useEffect(() => {
     let cancelled = false
     const fetchEta = async () => {
@@ -65,33 +72,38 @@ export function BlockTickerCard({ latestBlock }: { latestBlock: number }) {
         })
         if (cancelled || !res.ok) return
         const body = (await res.json()) as NextBlockEta
-        if (cancelled) return
-        setEta(body)
-        if (body.last_block_height > lastSeenHeight.current) {
-          lastSeenHeight.current = body.last_block_height
-          const tsMs = Date.parse(body.last_block_timestamp)
-          if (Number.isFinite(tsMs) && Date.now() - tsMs < 30_000) {
-            lastBumpAt.current = tsMs
-          } else {
-            lastBumpAt.current = Date.now()
-          }
-        }
+        if (!cancelled) setEta(body)
       } catch {
         /* swallow; next interval retries */
       }
     }
     fetchEta()
-    const refresh = setInterval(fetchEta, 10_000)
-    const tick = setInterval(() => setNow(Date.now()), 100)
+    let id: ReturnType<typeof setInterval> | null = null
+    const start = () => {
+      if (id) return
+      id = setInterval(fetchEta, 4000)
+    }
+    const stop = () => {
+      if (id) {
+        clearInterval(id)
+        id = null
+      }
+    }
+    const onVis = () => {
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    if (document.visibilityState === 'visible') start()
     return () => {
       cancelled = true
-      clearInterval(refresh)
-      clearInterval(tick)
+      document.removeEventListener('visibilitychange', onVis)
+      stop()
     }
   }, [])
 
   const meanInterval = eta?.mean_block_interval_secs
-  const elapsed = (now - lastBumpAt.current) / 1000
+  const elapsed = (now - bumpAt) / 1000
   const overdue = meanInterval != null && elapsed > meanInterval
   const secondsLeft =
     meanInterval != null ? Math.max(0, meanInterval - elapsed) : null
@@ -103,10 +115,6 @@ export function BlockTickerCard({ latestBlock }: { latestBlock: number }) {
   const filled = Math.floor(progress * cells)
   const warmingUp = eta != null && meanInterval == null
   const indexerBehind = (eta?.indexer_lag_secs ?? 0) > 5
-  // Take the higher of the two signals so the card never lags behind
-  // the StatsStrip's "Latest block" tile (both ultimately read from
-  // /v1/info via SSR, but eta can also race ahead during heavy lag).
-  const height = Math.max(latestBlock, eta?.last_block_height ?? 0)
 
   return (
     <FrameCard padding={22}>
@@ -136,7 +144,7 @@ export function BlockTickerCard({ latestBlock }: { latestBlock: number }) {
               className="serif"
               style={{ fontSize: 30, color: 'var(--color-ink)', lineHeight: 1 }}
             >
-              #{height.toLocaleString()}
+              #{displayedHeight.toLocaleString()}
             </span>
           </div>
         </div>
