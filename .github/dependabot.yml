@@ -1,0 +1,43 @@
+# Dependabot configuration — opens scheduled PRs to keep deps + GHA
+# action versions current. Catches the patch/minor bumps that close
+# security advisories before the high-severity alerts pile up.
+#
+# Note: this file is the *version updates* half of Dependabot. The
+# *security updates* half (instant PRs the moment GitHub sees a new
+# advisory affecting a dep we're on) is a repo-level toggle —
+# Settings → Code security → "Dependabot security updates" — and is
+# off by default. Worth enabling separately; the two features are
+# complementary, not redundant.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Group patch + minor bumps into one PR per group so the weekly
+    # sweep doesn't spawn a dozen near-identical PRs. Major bumps
+    # still open their own PR because they're more likely to need
+    # eyes-on review.
+    groups:
+      patch-and-minor:
+        update-types:
+          - patch
+          - minor
+    # Always rebase on top of main so the PR diff stays clean and
+    # mergeable without manual intervention.
+    rebase-strategy: auto
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      gha-bumps:
+        update-types:
+          - patch
+          - minor
+          - major
