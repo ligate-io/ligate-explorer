@@ -31,6 +31,25 @@ export default async function BlockPage({
   if (!block) notFound()
   const blockTxs = await getTxsForBlock(height)
 
+  // Slot-level fees aren't on the wire (the api adapter ships "0").
+  // Sum gas + protocol across the block's txs to get an honest total.
+  // ligate-api PR #43 brief explicitly calls this out: "The '0 LGT'
+  // the explorer currently shows on attestation blocks is wrong —
+  // it'll be 0.05–0.10 LGT once you sum both."
+  let feesTotal = 0n
+  for (const t of blockTxs) {
+    if (t.fee_nano) feesTotal += BigInt(t.fee_nano)
+    if (t.protocol_fee_nano) feesTotal += BigInt(t.protocol_fee_nano)
+  }
+
+  // Latency from slot timestamp to indexer-observed finalized_at.
+  // PR #44 surfaces both as ms; subtract once and let `finalityLag`
+  // drive the small "Ns after proposal" suffix on the row.
+  const finalityLagSec =
+    block.finalized_at_ms != null && block.finalized_at_ms > block.timestamp
+      ? Math.round((block.finalized_at_ms - block.timestamp) / 1000)
+      : null
+
   return (
     <>
       <div style={{ marginBottom: 24 }}>
@@ -50,11 +69,23 @@ export default async function BlockPage({
           ← Blocks
         </Link>
       </div>
-      <Eyebrow>Block</Eyebrow>
 
       <div
         style={{
-          marginTop: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          marginBottom: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Eyebrow>Block</Eyebrow>
+        <FinalityBadge status={block.finality_status} />
+      </div>
+
+      <div
+        style={{
+          marginTop: 4,
           display: 'flex',
           alignItems: 'baseline',
           gap: 24,
@@ -82,16 +113,10 @@ export default async function BlockPage({
             alignItems: 'center',
           }}
         >
-          <Link
-            href={`/blocks/${block.height - 1}`}
-            className="btn"
-          >
+          <Link href={`/blocks/${block.height - 1}`} className="btn">
             ← prev
           </Link>
-          <Link
-            href={`/blocks/${block.height + 1}`}
-            className="btn"
-          >
+          <Link href={`/blocks/${block.height + 1}`} className="btn">
             next →
           </Link>
         </div>
@@ -114,15 +139,34 @@ export default async function BlockPage({
                   label: 'Hash',
                   value: (
                     <>
-                      <span className="h-mono">{trunc(block.hash, 14, 12)}</span>
+                      <span className="h-mono">
+                        {trunc(block.hash, 14, 12)}
+                      </span>
                       <CopyButton value={block.hash} />
                     </>
                   ),
                 },
                 {
                   label: 'Prev hash',
-                  value: (
-                    <span className="h-mono">{trunc(block.prev_hash, 14, 12)}</span>
+                  value: block.prev_hash ? (
+                    <>
+                      <Link
+                        // The explorer routes blocks by height, not
+                        // hash, but the prev hash is what's on chain.
+                        // Linking to the height directly is the
+                        // cheapest correct thing — no extra resolve
+                        // round-trip — and the user gets the prev
+                        // block in one click.
+                        href={`/blocks/${block.height - 1}`}
+                        className="h-mono link"
+                        title={block.prev_hash}
+                      >
+                        {trunc(block.prev_hash, 14, 12)}
+                      </Link>
+                      <CopyButton value={block.prev_hash} />
+                    </>
+                  ) : (
+                    <span style={{ color: 'var(--color-subtle)' }}>—</span>
                   ),
                 },
                 {
@@ -136,6 +180,28 @@ export default async function BlockPage({
                     </>
                   ),
                 },
+                ...(block.finalized_at_ms != null
+                  ? [
+                      {
+                        label: 'Finalized',
+                        value: (
+                          <>
+                            {isoDate(block.finalized_at_ms)}
+                            {finalityLagSec != null ? (
+                              <span
+                                style={{
+                                  color: 'var(--color-subtle)',
+                                  marginLeft: 12,
+                                }}
+                              >
+                                ({formatLag(finalityLagSec)} after proposal)
+                              </span>
+                            ) : null}
+                          </>
+                        ),
+                      },
+                    ]
+                  : []),
               ]}
             />
           </div>
@@ -147,21 +213,48 @@ export default async function BlockPage({
               rows={[
                 {
                   label: 'Proposer',
-                  value: (
-                    <Link href={`/address/${block.proposer}`} className="link">
-                      {block.proposer}
-                    </Link>
+                  value: block.proposer ? (
+                    <>
+                      <span
+                        className="h-mono"
+                        title={block.proposer}
+                        style={{ color: 'var(--color-bone)' }}
+                      >
+                        {trunc(block.proposer, 14, 6)}
+                      </span>
+                      <CopyButton value={block.proposer} />
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: '0.18em',
+                          textTransform: 'uppercase',
+                          color: 'var(--color-subtle)',
+                          marginLeft: 8,
+                        }}
+                        title="Celestia DA wallet that submitted this slot's first batch."
+                      >
+                        celestia DA
+                      </span>
+                    </>
+                  ) : (
+                    <span style={{ color: 'var(--color-subtle)' }}>—</span>
                   ),
                 },
                 { label: 'Tx count', value: block.tx_count },
                 {
                   label: 'Fees total',
-                  value: (
-                    <>
-                      {fmtLgt(block.fees_total_nano)}{' '}
-                      <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
-                    </>
-                  ),
+                  value:
+                    feesTotal > 0n ? (
+                      <>
+                        {fmtLgt(feesTotal.toString())}{' '}
+                        <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+                      </>
+                    ) : (
+                      <>
+                        0 <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+                      </>
+                    ),
                 },
               ]}
             />
@@ -187,4 +280,81 @@ export default async function BlockPage({
       </div>
     </>
   )
+}
+
+// Maps the optional finality_status field to a small chip. Renders
+// nothing when the field is absent (legacy rows pre PR #44) so the
+// header layout doesn't reserve dead space for blocks we have no
+// settlement signal on.
+function FinalityBadge({ status }: { status?: string }) {
+  if (!status) return null
+  const finalized = status === 'finalized'
+  const pending = status === 'pending'
+  const color = finalized
+    ? 'var(--color-accent)'
+    : pending
+      ? 'var(--color-amber)'
+      : 'var(--color-subtle)'
+  return (
+    <span
+      className="mono"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        border: `1px solid ${color}`,
+        color,
+        fontSize: 10,
+        letterSpacing: '0.18em',
+        textTransform: 'uppercase',
+      }}
+      title={
+        finalized
+          ? 'DA layer has settled this slot.'
+          : pending
+            ? 'Slot landed on chain but DA hasn’t observed finality yet.'
+            : `Status: ${status}`
+      }
+    >
+      {pending ? <PendingDot color={color} /> : <CheckDot color={color} />}
+      {finalized ? 'finalized' : pending ? 'pending DA' : status}
+    </span>
+  )
+}
+
+function PendingDot({ color }: { color: string }) {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden>
+      <circle cx="4" cy="4" r="3" stroke={color} strokeWidth="1" fill="none">
+        <animate
+          attributeName="opacity"
+          values="0.4;1;0.4"
+          dur="1.4s"
+          repeatCount="indefinite"
+        />
+      </circle>
+    </svg>
+  )
+}
+
+function CheckDot({ color }: { color: string }) {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden>
+      <path
+        d="M1.5 4 L3.3 5.8 L6.5 2.2"
+        stroke={color}
+        strokeWidth="1.4"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function formatLag(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return s === 0 ? `${m}m` : `${m}m ${s}s`
 }

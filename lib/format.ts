@@ -57,3 +57,30 @@ export function shortHash(hash: string, head = 6, tail = 4): string {
 export function isoDate(timestamp: number): string {
   return new Date(timestamp).toISOString().replace('T', ' ').slice(0, 19) + 'Z'
 }
+
+/**
+ * Future-tense relative time. Inverse of `ago()`. Used by the faucet
+ * cooldown ("come back in 18h"), tx-pending elapsed counter, etc.
+ *
+ * Accepts an RFC3339 string (the api emits these), a Date, or a Unix
+ * ms number. Returns "now" if the time is in the past or unparseable;
+ * the caller is expected to show that as "you can drip now" rather
+ * than rendering nothing.
+ */
+export function untilHuman(target: Date | string | number | null): string {
+  if (target == null) return 'now'
+  const t = target instanceof Date ? target.getTime() : typeof target === 'number' ? target : Date.parse(target)
+  if (!Number.isFinite(t)) return 'now'
+  const seconds = Math.max(0, Math.floor((t - Date.now()) / 1000))
+  if (seconds < 5) return 'now'
+  if (seconds < 60) return `in ${seconds}s`
+  if (seconds < 3600) return `in ${Math.floor(seconds / 60)}m`
+  if (seconds < 86400) {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    return m === 0 ? `in ${h}h` : `in ${h}h ${m}m`
+  }
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  return h === 0 ? `in ${d}d` : `in ${d}d ${h}h`
+}

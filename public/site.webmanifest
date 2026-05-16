@@ -1,5 +1,5 @@
 {
-  "name": "Ligate Chain Explorer",
+  "name": "Ligate Explorer",
   "short_name": "Ligate Explorer",
   "description": "Block, transaction, schema, attestor set, and attestation explorer for Ligate Chain devnet.",
   "start_url": "/",

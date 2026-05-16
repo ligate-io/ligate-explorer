@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getAttestation } from '@/lib/api'
-import { ago, isoDate, trunc } from '@/lib/format'
+import { getAttestationItem, getSchema, getTx } from '@/lib/api'
+import { ago, fmtLgt, fmtLgtTrim, isoDate, trunc } from '@/lib/format'
 import { CopyButton } from '@/components/copy-button'
 import { Eyebrow, LV } from '@/components/ui'
 
@@ -14,18 +14,37 @@ export async function generateMetadata({
   params: Promise<{ id: string }>
 }): Promise<Metadata> {
   const { id } = await params
-  const a = await getAttestation(id)
-  return { title: a ? `Attestation ${trunc(a.attestation_id, 8, 6)}` : 'Attestation' }
+  const a = await getAttestationItem(id)
+  return {
+    title: a ? `Attestation ${trunc(a.payload_hash, 8, 6)}` : 'Attestation',
+  }
 }
 
+// Detail page consumes the new `AttestationItem` shape (id, schema_id,
+// payload_hash, submitter, signature_count, submitted_at). Schema name +
+// threshold + attestor_set_id aren't carried on the attestation row, so
+// we cross-fetch /v1/schemas/{id} in parallel for the rich rendering.
+// Schema fetch is best-effort: the page still renders if it 404s
+// (schema id is always present on the attestation).
 export default async function AttestationPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const a = await getAttestation(id)
+  const a = await getAttestationItem(id)
   if (!a) notFound()
+  // Schema gives us the human name + threshold; tx gives us the
+  // gas + protocol fee burned to land this attestation on chain.
+  // Both are best-effort — the page still renders if either 5xx's.
+  const [schema, tx] = await Promise.all([
+    getSchema(a.schema_id).catch(() => null),
+    getTx(a.submitted_at.tx_hash).catch(() => null),
+  ])
+  const tMs = Date.parse(a.submitted_at.timestamp)
+  const tValid = Number.isFinite(tMs)
+  const gasNano = tx?.fee_nano ?? null
+  const protoNano = tx?.protocol_fee_nano ?? null
 
   return (
     <>
@@ -56,7 +75,7 @@ export default async function AttestationPage({
             fontWeight: 400,
           }}
         >
-          {a.schema_name}{' '}
+          {schema?.name ?? 'Schema'}{' '}
           <span style={{ color: 'var(--color-subtle)', fontStyle: 'italic' }}>
             attestation
           </span>
@@ -73,14 +92,14 @@ export default async function AttestationPage({
           <span
             className="mono"
             style={{
-              fontSize: 14,
+              fontSize: 13,
               color: 'var(--color-bone)',
               wordBreak: 'break-all',
             }}
           >
-            {a.attestation_id}
+            {a.id}
           </span>
-          <CopyButton value={a.attestation_id} />
+          <CopyButton value={a.id} />
         </div>
       </div>
 
@@ -101,21 +120,25 @@ export default async function AttestationPage({
                   label: 'Schema',
                   value: (
                     <Link href={`/schema/${a.schema_id}`} className="link">
-                      {a.schema_name}
+                      {schema?.name ?? trunc(a.schema_id, 12, 8)}
                     </Link>
                   ),
                 },
-                {
-                  label: 'Attestor set',
-                  value: (
-                    <Link
-                      href={`/attestor-set/${a.attestor_set_id}`}
-                      className="link"
-                    >
-                      {trunc(a.attestor_set_id, 12, 8)}
-                    </Link>
-                  ),
-                },
+                ...(schema?.attestor_set_id
+                  ? [
+                      {
+                        label: 'Attestor set',
+                        value: (
+                          <Link
+                            href={`/attestor-set/${schema.attestor_set_id}`}
+                            className="link"
+                          >
+                            {trunc(schema.attestor_set_id, 12, 8)}
+                          </Link>
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   label: 'Submitter',
                   value: (
@@ -145,10 +168,13 @@ export default async function AttestationPage({
                   label: 'Signatures',
                   value: (
                     <span style={{ color: 'var(--color-accent)' }}>
-                      {a.signature_count} collected{' '}
-                      <span style={{ color: 'var(--color-subtle)' }}>
-                        (threshold {a.threshold})
-                      </span>
+                      {a.signature_count} collected
+                      {schema?.threshold ? (
+                        <span style={{ color: 'var(--color-subtle)' }}>
+                          {' '}
+                          (threshold {schema.threshold})
+                        </span>
+                      ) : null}
                     </span>
                   ),
                 },
@@ -156,31 +182,40 @@ export default async function AttestationPage({
                   label: 'Block',
                   value: (
                     <Link
-                      href={`/blocks/${a.block_height}`}
+                      href={`/blocks/${a.submitted_at.block_height}`}
                       className="link"
                     >
-                      #{a.block_height}
+                      #{a.submitted_at.block_height}
                     </Link>
                   ),
                 },
                 {
                   label: 'Transaction',
                   value: (
-                    <Link href={`/tx/${a.tx_hash}`} className="link">
-                      {trunc(a.tx_hash, 12, 8)}
+                    <Link
+                      href={`/tx/${a.submitted_at.tx_hash}`}
+                      className="link"
+                    >
+                      {trunc(a.submitted_at.tx_hash, 12, 8)}
                     </Link>
                   ),
                 },
                 {
                   label: 'Submitted',
-                  value: (
+                  value: tValid ? (
                     <>
-                      {isoDate(a.timestamp)}{' '}
+                      {isoDate(tMs)}{' '}
                       <span style={{ color: 'var(--color-subtle)' }}>
-                        ({ago(Math.floor((Date.now() - a.timestamp) / 1000))})
+                        ({ago(Math.floor((Date.now() - tMs) / 1000))})
                       </span>
                     </>
+                  ) : (
+                    <span style={{ color: 'var(--color-subtle)' }}>—</span>
                   ),
+                },
+                {
+                  label: 'Fee paid',
+                  value: <FeeBreakdown gas={gasNano} proto={protoNano} />,
                 },
               ]}
             />
@@ -197,9 +232,48 @@ export default async function AttestationPage({
         }}
       >
         The chain stores only the payload hash and the attestor signatures.
-        The payload itself never touches the chain — verification is done by
+        The payload itself never touches the chain. Verification is done by
         re-hashing the off-chain payload and checking it against this record.
       </p>
     </>
+  )
+}
+
+// Two-line fee breakdown: gas fee paid by submitter (top, often "not
+// exposed yet" while indexer doesn't surface fee_paid_nano) + protocol
+// fee burned at execution (amber, when non-zero). Mirrors the table
+// FeeCell so attestation detail and tx list use the same vocabulary.
+function FeeBreakdown({
+  gas,
+  proto,
+}: {
+  gas: string | null
+  proto: string | null
+}) {
+  const hasGas = gas != null && gas !== '0' && gas !== ''
+  const hasProto = proto != null && proto !== '0' && proto !== ''
+  if (!hasGas && !hasProto) {
+    return (
+      <span style={{ color: 'var(--color-subtle)' }}>not exposed yet</span>
+    )
+  }
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <span>
+        {hasGas ? (
+          <>
+            {fmtLgt(gas)}{' '}
+            <span style={{ color: 'var(--color-subtle)' }}>LGT gas</span>
+          </>
+        ) : (
+          <span style={{ color: 'var(--color-subtle)' }}>0 LGT gas</span>
+        )}
+      </span>
+      {hasProto ? (
+        <span style={{ color: 'var(--color-amber)', fontSize: 12 }}>
+          + {fmtLgtTrim(proto)} LGT protocol
+        </span>
+      ) : null}
+    </span>
   )
 }

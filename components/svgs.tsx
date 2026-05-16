@@ -245,7 +245,11 @@ export function BlockSpark({
   blocks: { tx_count: number }[]
 }) {
   if (!blocks.length) return null
-  const max = Math.max(...blocks.map((b) => b.tx_count))
+  // Guard against the all-zero case (early devnet, every recent block
+  // has tx_count: 0). Using 1 here makes every bar render as 0 height
+  // instead of NaN, which keeps React from complaining about NaN SVG
+  // attributes and the spark from collapsing.
+  const max = Math.max(1, ...blocks.map((b) => b.tx_count))
   const w = 1.0
   const h = 60
   const gap = 0.2

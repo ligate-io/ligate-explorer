@@ -15,6 +15,7 @@ export interface PageResult<T> {
 export type TxType =
   | 'SubmitAttestation'
   | 'RegisterSchema'
+  | 'RegisterAttestorSet'
   | 'Transfer'
   | 'BondSequencer'
   | 'SubmitProof'
@@ -31,11 +32,26 @@ export interface Address {
 export interface Block {
   height: number
   hash: string
-  prev_hash: string
+  /** Parent slot hash. `null` on genesis and on legacy rows pre
+   *  ligate-api PR #44 (the indexer derives it from slot N-1). */
+  prev_hash: string | null
   timestamp: number
   tx_count: number
-  proposer: string
+  /** Sequencer's Celestia bech32 address (the `da_address` that
+   *  submitted the slot's first batch). `null` on legacy rows.
+   *  No /address page yet — render as text + copy. */
+  proposer: string | null
+  /** Sum of fee_paid_nano + protocol_fee_nano across all txs. The api
+   *  doesn't carry a slot-level total, so this is computed downstream
+   *  from `getTxsForBlock`; the adapter emits `"0"` and detail pages
+   *  recompute. */
   fees_total_nano: string
+  /** DA-layer settlement state. Omitted on legacy rows (treat absent
+   *  as "unknown — render no badge"). */
+  finality_status?: 'pending' | 'finalized' | string
+  /** ms-since-epoch when the indexer observed pending → finalized.
+   *  Omitted while still pending or on legacy rows. */
+  finalized_at_ms?: number | null
 }
 
 export interface TxEvent {
@@ -52,19 +68,31 @@ export interface Tx {
   sender: string
   type: TxType
   status: TxStatus
+  /** Gas / execution fee paid by the sender. `"0"` until the indexer
+   *  exposes it (chain elides from REST in migration 0003). */
   fee_nano: string
+  /** Protocol fee burned at execution. Surfaced per-tx by the api now
+   *  (used to be hardcoded per-kind on the explorer side). `"0"` for
+   *  kinds with no protocol fee (e.g. transfer). */
+  protocol_fee_nano: string
   gas_used: number
   nonce: number
   timestamp: number
+  /** Raw RFC 0002 `details` blob. Per-kind shape:
+   *  - transfer: `{ from, to, amount_nano, token_id }`
+   *  - submit_attestation: `{ schema_id, payload_hash, signature_count }`
+   *  - register_schema: `{ schema_id, name, version, ... }`
+   *  - register_attestor_set: `{ attestor_set_id, members, threshold }`
+   *  Use `lib/tx-payload.ts` typed accessors at the render site. */
   payload: Record<string, unknown>
+  /** The complete wire response from `/v1/txs/{hash}` — every field
+   *  the api ships, including the per-tx envelope (position,
+   *  sender_pubkey, outcome, revert_reason, block_*) plus the full
+   *  `details` blob. Rendered verbatim in the "Raw transaction"
+   *  section so the user sees everything we have, not just the
+   *  curated detail blocks above. */
+  raw_response: Record<string, unknown>
   events: TxEvent[]
-}
-
-export interface SchemaAttestation {
-  submitter: string
-  payload_hash: string
-  timestamp: number
-  block_height: number
 }
 
 export interface Schema {
@@ -79,45 +107,30 @@ export interface Schema {
   payload_shape_hash: string
   description: string
   attestation_count: number
-  recent_attestations: SchemaAttestation[]
 }
 
-// A single attestation: the chain's core object. Identified by a
-// `lat1…` id; binds a payload hash to the schema it was submitted
-// under and the attestor set whose threshold signed it.
-export interface Attestation {
-  attestation_id: string
-  schema_id: string
-  schema_name: string
-  attestor_set_id: string
-  submitter: string
-  payload_hash: string
-  signature_count: number
-  threshold: string
-  block_height: number
-  tx_hash: string
-  timestamp: number
-}
-
-// A registered attestor set: `las1…` id, the member pubkeys, the
-// signing threshold, and the schemas bound to it.
-export interface AttestorSet {
-  attestor_set_id: string
-  members: string[]
-  threshold: number
-  schema_count: number
-  attestation_count: number
-  registered_block: number
-  bound_schemas: { schema_id: string; name: string; version: number }[]
-}
+// NOTE: the legacy `SchemaAttestation`, `Attestation`, and
+// `AttestorSet` interfaces were dropped. The api now ships
+// `AttestationItem` (below) for both list rows and detail responses,
+// and `AttestorSetItem` for attestor-set list + detail. Schema's
+// `recent_attestations: SchemaAttestation[]` field was always `[]`
+// in the adapter — detail pages cross-fetch via
+// `getSchemaAttestations()` instead.
 
 export interface ChainInfo {
   chain_id: string
   chain_hash: string
+  /** /v1/info.version — the API server's own Cargo crate version,
+   *  NOT the chain node binary version. The api doesn't currently
+   *  expose the node version anywhere. Render under "API version",
+   *  not "Node version". */
   version: string
   latest_block: number
   tx_per_second: number
+  /** Human string ("~6s") derived from block_time_ms; falls back to NEXT_PUBLIC_FINALITY env. */
   finality: string
+  /** Raw median delta between recent block timestamps in ms, or null when not yet measurable. */
+  block_time_ms: number | null
   rpc_url: string
   api_url: string
   supply_nano: string
@@ -146,4 +159,130 @@ export interface DripStatus {
 export interface DripResult {
   tx_hash: string
   amount_nano: string
+}
+
+// ============================================================================
+// Stats endpoints (api /v1/stats/*)
+// ============================================================================
+
+export interface StatsTotals {
+  indexed_at_slot: number
+  blocks: number
+  txs_total: number
+  txs_committed: number
+  addresses: number
+  schemas: number
+  attestor_sets: number
+  attestations: number
+  /** Total LGT supply in nano. Now reliably populated post ligate-api
+   *  PR #42 (the supply query was hitting a hex path the chain
+   *  rejected; switched to bech32m token_…). The fallback at the
+   *  fetcher level still kicks in if the whole stats endpoint 5xx's,
+   *  but the field itself shouldn't be missing under normal operation. */
+  total_supply_nano: string
+  treasury_balance_nano?: string
+  treasury_address?: string
+}
+
+// /v1/stats/finality. Real percentiles over the configured window once
+// the api has 20+ observations (post ligate-api PR #44); falls back to
+// `source: 'estimated'`, `window: 'static'`, `sampled_count: 0` on a
+// fresh deploy. UI surfaces `source` as a "live" vs "estimated" badge,
+// and a "low-confidence" hint when sampled_count < 100.
+export interface FinalityStats {
+  window: string
+  sampled_count: number
+  p50_seconds: number
+  p95_seconds: number
+  p99_seconds: number
+  da_layer: string
+  source: 'estimated' | 'observed' | string
+  as_of: string
+}
+
+// /v1/stats/next-block-eta — drop-in for a "next block in Ns" live
+// ticker. 5s cache TTL. The four interval/eta fields can be absent
+// (not null) when fewer than 2 slots have been indexed; treat that as
+// "indexer warming up." `seconds_until_expected` may be negative when
+// the chain is overdue; render as "expected any moment" rather than
+// negative seconds. `indexer_lag_secs > 5` means the indexer is behind
+// the chain — surface as a subtle hint.
+export interface NextBlockEta {
+  last_block_height: number
+  /** RFC3339 ms timestamp. */
+  last_block_timestamp: string
+  mean_block_interval_secs?: number
+  p95_block_interval_secs?: number
+  /** RFC3339 ms timestamp (mean_interval + last_block_timestamp). */
+  expected_next_at?: string
+  seconds_since_last: number
+  /** Negative once we're past the expected next-block time. */
+  seconds_until_expected?: number
+  indexer_lag_secs: number
+}
+
+// /v1/search response. Discriminated union on `kind`.
+export type SearchResult =
+  | { kind: 'block'; block_height: number }
+  | { kind: 'tx'; tx_hash: string }
+  | { kind: 'address'; address: string }
+  | { kind: 'schema'; schema_id: string }
+  | { kind: 'attestor_set'; attestor_set_id: string }
+  | { kind: 'attestation'; schema_id: string; payload_hash: string }
+  | { kind: 'not_found'; query: string }
+
+// One row from /v1/attestations or its by-schema / by-set variants.
+// The new shape has nested `submitted_at` (block_height + tx_hash +
+// timestamp) instead of the older flat fields, and includes the
+// `id = lsc1…:lph1…` compound for routing to detail.
+export interface AttestationItem {
+  id: string
+  schema_id: string
+  payload_hash: string
+  submitter: string
+  submitter_pubkey?: string
+  signature_count: number
+  submitted_at: {
+    block_height: number
+    tx_hash: string
+    timestamp: string
+  }
+}
+
+// One row from /v1/attestor-sets list. Distinct from the existing
+// `AttestorSet` (detail-shaped, with bound_schemas + attestation_count)
+// so list pages don't have to fan out to detail per row.
+export interface AttestorSetItem {
+  id: string
+  members: string[]
+  threshold: number
+  schema_count: number
+  registered_at: {
+    block_height: number
+    tx_hash: string
+    timestamp: string
+  }
+}
+
+export interface TxRatePoint {
+  date: string // YYYY-MM-DD
+  kind: string
+  outcome: string
+  count: number
+}
+
+// /v1/stats/attestations-daily (ligate-api PR #53). One point per day
+// the chain saw attestations land. Days with zero attestations are
+// absent from `points` (Postgres GROUP BY doesn't emit empty groups);
+// callers fill missing dates with 0 on the explorer side.
+export interface AttestationDailyPoint {
+  date: string // YYYY-MM-DD
+  count: number
+}
+
+export interface TopHolder {
+  rank: number
+  address: string
+  balance_nano: string
+  balance_lgt: number
 }
