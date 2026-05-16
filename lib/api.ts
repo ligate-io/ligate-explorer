@@ -43,23 +43,53 @@ const fallbackFinality = process.env.NEXT_PUBLIC_FINALITY ?? "~12s";
 const fallbackLgtSupplyNano =
   process.env.NEXT_PUBLIC_LGT_SUPPLY ?? "1000000000000000000"; // 1B LGT
 
-// All fetches honor the api's Cache-Control headers (added in
-// ligate-api PR #45). Tier 0 brief set sensible TTLs per endpoint:
-//   5s   /v1/info, /v1/blocks list, /v1/txs list, /v1/stats/next-block-eta
-//   10s  /v1/stats/totals
-//   30s  /v1/stats/finality, /v1/attestations list
-//   60s  /v1/schemas list, /v1/attestor-sets list
-//   300s /v1/blocks/{height}, /v1/txs/{hash}, /v1/attestations/{id}
-// Next.js fetch cache + Vercel CDN both pick this up automatically.
-// Same-URL fetches in a single render are deduped; same-URL fetches
-// across renders within max-age serve from the cache.
-//
-// AutoRefresh's router.refresh() invalidates the route cache so polling
-// still detects new blocks — the fetch cache just stops us from making
-// duplicate origin RTTs within a single render OR within the response's
-// max-age window.
-//
-// Caller can override per-fetch (e.g. drip-tx polling needs no-store).
+// Per-endpoint cache TTLs in seconds. Mirrors the api's Cache-Control
+// max-age values (ligate-api PR #49 Tier 0). Why we re-encode them
+// here: Next.js's RSC fetch cache does NOT honor upstream
+// Cache-Control headers — it ignores them and uses force-cache by
+// default, which freezes responses at build time. The Vercel CDN
+// layer DOES honor Cache-Control, but it sits behind the RSC cache,
+// so without opting in via `next: { revalidate }` we never reach the
+// CDN. Each fetcher passes its endpoint's TTL via the helper below;
+// `live: true` overrides shorten that to 6s for AutoRefresh-driven
+// homepage cards; `cache: 'no-store'` opts out entirely for fully
+// dynamic reads (drip status, search).
+const TTL = {
+  INFO: 5,
+  STATS_TOTALS: 10,
+  STATS_FINALITY: 30,
+  STATS_NEXT_BLOCK_ETA: 5,
+  STATS_DAILY: 60,
+  STATS_TOP_HOLDERS: 60,
+  BLOCKS_LIST: 5,
+  BLOCK_DETAIL: 60,
+  TXS_LIST: 5,
+  TXS_FOR_BLOCK: 60,
+  TX_DETAIL: 300,
+  ATTESTATIONS_LIST: 30,
+  ATTESTATION_DETAIL: 300,
+  ATTESTOR_SETS_LIST: 60,
+  ATTESTOR_SET_DETAIL: 60,
+  SCHEMAS_LIST: 60,
+  SCHEMA_DETAIL: 60,
+  ADDRESS_SUMMARY: 30,
+  ADDRESS_TXS: 30,
+  // Live override for homepage cards that AutoRefresh polls every ~6s.
+  // Shorter than any endpoint's documented TTL so a freshly-registered
+  // attestor set / schema / attestation surfaces within one cycle.
+  LIVE: 6,
+} as const;
+
+/**
+ * Build a `next: { revalidate }` init object honoring `opts.live` if
+ * present (shortens to TTL.LIVE). Pass the resulting init to
+ * `fetchJson`. Pass `undefined` instead if you want `cache: 'no-store'`
+ * — see `searchByQuery` / `getDripStatus` for examples.
+ */
+function ttl(seconds: number, opts?: { live?: boolean }): RequestInit {
+  return { next: { revalidate: opts?.live ? TTL.LIVE : seconds } };
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${apiBase}${path}`, init);
   if (!res.ok) {
@@ -543,13 +573,13 @@ export async function getInfo(): Promise<ChainInfo> {
   // Each non-info call has its own catch so one slow / failing source
   // doesn't take the whole header down.
   const [info, txs, totals, finality, nextEta] = await Promise.all([
-    fetchJson<ApiInfoResponse>("/v1/info"),
-    fetchJson<Page<ApiTxResponse>>("/v1/txs?limit=100").catch(() => ({
+    fetchJson<ApiInfoResponse>("/v1/info", ttl(TTL.INFO)),
+    fetchJson<Page<ApiTxResponse>>("/v1/txs?limit=100", ttl(TTL.TXS_LIST)).catch(() => ({
       data: [],
       pagination: { next: null, limit: 0 },
     })),
-    fetchJson<StatsTotals>("/v1/stats/totals").catch(() => null),
-    fetchJson<FinalityStats>("/v1/stats/finality").catch(() => null),
+    fetchJson<StatsTotals>("/v1/stats/totals", ttl(TTL.STATS_TOTALS)).catch(() => null),
+    fetchJson<FinalityStats>("/v1/stats/finality", ttl(TTL.STATS_FINALITY)).catch(() => null),
     getNextBlockEta(),
   ]);
   const tps = computeTpsFromTxs(txs.data);
@@ -606,7 +636,7 @@ export async function getFinalityStats(): Promise<FinalityStats | null> {
     };
   }
   try {
-    return await fetchJson<FinalityStats>("/v1/stats/finality");
+    return await fetchJson<FinalityStats>("/v1/stats/finality", ttl(TTL.STATS_FINALITY));
   } catch {
     return null;
   }
@@ -672,7 +702,7 @@ export async function getAttestationItems(
   try {
     const raw = await fetchJson<AttestationItemPage>(
       `/v1/attestations?${qs}`,
-      opts?.live ? { next: { revalidate: 6 } } : undefined,
+      ttl(TTL.ATTESTATIONS_LIST, opts),
     );
     return { items: raw.data, nextCursor: raw.pagination.next };
   } catch {
@@ -685,7 +715,10 @@ export async function getAttestationItem(
 ): Promise<AttestationItem | null> {
   if (useMockApi) return null;
   try {
-    return await fetchJson<AttestationItem>(`/v1/attestations/${id}`);
+    return await fetchJson<AttestationItem>(
+      `/v1/attestations/${id}`,
+      ttl(TTL.ATTESTATION_DETAIL),
+    );
   } catch {
     return null;
   }
@@ -705,7 +738,7 @@ export async function getAttestorSetItems(
   try {
     const raw = await fetchJson<AttestorSetItemPage>(
       `/v1/attestor-sets?${qs}`,
-      opts?.live ? { next: { revalidate: 6 } } : undefined,
+      ttl(TTL.ATTESTOR_SETS_LIST, opts),
     );
     return { items: raw.data, nextCursor: raw.pagination.next };
   } catch {
@@ -724,6 +757,7 @@ export async function getSchemaAttestations(
   try {
     const raw = await fetchJson<AttestationItemPage>(
       `/v1/schemas/${schemaId}/attestations?${qs}`,
+      ttl(TTL.ATTESTATIONS_LIST),
     );
     return { items: raw.data, nextCursor: raw.pagination.next };
   } catch {
@@ -742,6 +776,7 @@ export async function getAttestorSetAttestationsList(
   try {
     const raw = await fetchJson<AttestationItemPage>(
       `/v1/attestor-sets/${setId}/attestations?${qs}`,
+      ttl(TTL.ATTESTATIONS_LIST),
     );
     return { items: raw.data, nextCursor: raw.pagination.next };
   } catch {
@@ -774,7 +809,7 @@ export async function getStatsTotals(): Promise<StatsTotals> {
       total_supply_nano: "1000000000000000000",
     };
   }
-  return fetchJson<StatsTotals>("/v1/stats/totals");
+  return fetchJson<StatsTotals>("/v1/stats/totals", ttl(TTL.STATS_TOTALS));
 }
 
 // /v1/stats/next-block-eta — drop-in for the BlockTickerCard live
@@ -801,7 +836,10 @@ export async function getNextBlockEta(): Promise<NextBlockEta | null> {
     };
   }
   try {
-    return await fetchJson<NextBlockEta>("/v1/stats/next-block-eta");
+    return await fetchJson<NextBlockEta>(
+      "/v1/stats/next-block-eta",
+      ttl(TTL.STATS_NEXT_BLOCK_ETA),
+    );
   } catch {
     return null;
   }
@@ -812,6 +850,7 @@ export async function getTxRateDaily(days = 1): Promise<TxRatePoint[]> {
   try {
     const r = await fetchJson<{ days: number; points: TxRatePoint[] }>(
       `/v1/stats/tx-rate-daily?days=${days}`,
+      ttl(TTL.STATS_DAILY),
     );
     return r.points;
   } catch {
@@ -830,6 +869,7 @@ export async function getAttestationsDaily(
   try {
     const r = await fetchJson<{ days: number; points: AttestationDailyPoint[] }>(
       `/v1/stats/attestations-daily?days=${days}`,
+      ttl(TTL.STATS_DAILY),
     );
     return r.points;
   } catch {
@@ -842,6 +882,7 @@ export async function getTopHolders(n = 10): Promise<TopHolder[]> {
   try {
     const r = await fetchJson<{ source: string; holders: TopHolder[] }>(
       `/v1/stats/top-holders?n=${n}`,
+      ttl(TTL.STATS_TOP_HOLDERS),
     );
     return r.holders;
   } catch {
@@ -853,6 +894,7 @@ export async function getLatestBlocks(limit = 20): Promise<Block[]> {
   if (useMockApi) return mockData.blocks.slice(0, limit);
   const raw = await fetchJson<Page<ApiBlockResponse>>(
     `/v1/blocks?limit=${limit}`,
+    ttl(TTL.BLOCKS_LIST),
   );
   return raw.data.map(adaptBlockResponse);
 }
@@ -862,7 +904,10 @@ export async function getAllBlocks(): Promise<Block[]> {
   // Snapshot of the most-recent 100 blocks, used for header stats
   // (avg-tx / fees / max height) on `/blocks` and `/`. Paginated
   // drill-down is `getBlocksPage`.
-  const raw = await fetchJson<Page<ApiBlockResponse>>("/v1/blocks?limit=100");
+  const raw = await fetchJson<Page<ApiBlockResponse>>(
+    "/v1/blocks?limit=100",
+    ttl(TTL.BLOCKS_LIST),
+  );
   return raw.data.map(adaptBlockResponse);
 }
 
@@ -888,7 +933,10 @@ export async function getBlocksPage(
   }
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
-  const raw = await fetchJson<Page<ApiBlockResponse>>(`/v1/blocks?${qs}`);
+  const raw = await fetchJson<Page<ApiBlockResponse>>(
+    `/v1/blocks?${qs}`,
+    ttl(TTL.BLOCKS_LIST),
+  );
   return {
     items: raw.data.map(adaptBlockResponse),
     nextCursor: raw.pagination.next,
@@ -899,7 +947,10 @@ export async function getBlock(height: number): Promise<Block | null> {
   if (useMockApi)
     return mockData.blocks.find((b) => b.height === height) ?? null;
   try {
-    const raw = await fetchJson<ApiBlockResponse>(`/v1/blocks/${height}`);
+    const raw = await fetchJson<ApiBlockResponse>(
+      `/v1/blocks/${height}`,
+      ttl(TTL.BLOCK_DETAIL),
+    );
     return adaptBlockResponse(raw);
   } catch {
     return null;
@@ -908,13 +959,19 @@ export async function getBlock(height: number): Promise<Block | null> {
 
 export async function getLatestTxs(limit = 20): Promise<Tx[]> {
   if (useMockApi) return mockData.txs.slice(0, limit);
-  const raw = await fetchJson<Page<ApiTxResponse>>(`/v1/txs?limit=${limit}`);
+  const raw = await fetchJson<Page<ApiTxResponse>>(
+    `/v1/txs?limit=${limit}`,
+    ttl(TTL.TXS_LIST),
+  );
   return raw.data.map(adaptTxResponse);
 }
 
 export async function getAllTxs(): Promise<Tx[]> {
   if (useMockApi) return mockData.txs;
-  const raw = await fetchJson<Page<ApiTxResponse>>("/v1/txs?limit=100");
+  const raw = await fetchJson<Page<ApiTxResponse>>(
+    "/v1/txs?limit=100",
+    ttl(TTL.TXS_LIST),
+  );
   return raw.data.map(adaptTxResponse);
 }
 
@@ -943,7 +1000,7 @@ export async function getTxsPage(
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   if (kind) qs.set("kind", kind);
-  const raw = await fetchJson<Page<ApiTxResponse>>(`/v1/txs?${qs}`);
+  const raw = await fetchJson<Page<ApiTxResponse>>(`/v1/txs?${qs}`, ttl(TTL.TXS_LIST));
   return {
     items: raw.data.map(adaptTxResponse),
     nextCursor: raw.pagination.next,
@@ -974,7 +1031,7 @@ function wireKindOf(t: string): string {
 export async function getTx(hash: string): Promise<Tx | null> {
   if (useMockApi) return mockData.txs.find((t) => t.hash === hash) ?? null;
   try {
-    const raw = await fetchJson<ApiTxResponse>(`/v1/txs/${hash}`);
+    const raw = await fetchJson<ApiTxResponse>(`/v1/txs/${hash}`, ttl(TTL.TX_DETAIL));
     return adaptTxResponse(raw);
   } catch {
     return null;
@@ -989,6 +1046,7 @@ export async function getTxsForBlock(height: number): Promise<Tx[]> {
   if (useMockApi) return mockData.txs.filter((t) => t.height === height);
   const raw = await fetchJson<Page<ApiTxResponse>>(
     `/v1/txs?block_height=${height}&limit=100`,
+    ttl(TTL.TXS_FOR_BLOCK),
   );
   return raw.data.map(adaptTxResponse);
 }
@@ -1034,7 +1092,7 @@ export async function getSchemas(opts?: { live?: boolean }): Promise<Schema[]> {
   if (useMockApi) return mockData.schemas;
   const raw = await fetchJson<Page<ApiSchemaResponse>>(
     "/v1/schemas?limit=100",
-    opts?.live ? { next: { revalidate: 6 } } : undefined,
+    ttl(TTL.SCHEMAS_LIST, opts),
   );
   return raw.data.map((s) => adaptSchemaResponse(s));
 }
@@ -1055,6 +1113,7 @@ export async function getSchemasForSet(
   try {
     const raw = await fetchJson<Page<ApiSchemaResponse>>(
       `/v1/schemas?attestor_set_id=${encodeURIComponent(attestorSetId)}&limit=100`,
+      ttl(TTL.SCHEMAS_LIST),
     );
     return raw.data.map((s) => adaptSchemaResponse(s));
   } catch {
@@ -1067,7 +1126,10 @@ export async function getSchema(id: string): Promise<Schema | null> {
     return mockData.schemas.find((s) => s.schema_id === id) ?? null;
   let raw: ApiSchemaResponse;
   try {
-    raw = await fetchJson<ApiSchemaResponse>(`/v1/schemas/${id}`);
+    raw = await fetchJson<ApiSchemaResponse>(
+      `/v1/schemas/${id}`,
+      ttl(TTL.SCHEMA_DETAIL),
+    );
   } catch {
     return null;
   }
@@ -1079,6 +1141,7 @@ export async function getSchema(id: string): Promise<Schema | null> {
   try {
     const set = await fetchJson<ApiAttestorSetResponse>(
       `/v1/attestor-sets/${raw.attestor_set_id}`,
+      ttl(TTL.ATTESTOR_SET_DETAIL),
     );
     totalMembers = set.members.length;
   } catch {
@@ -1126,7 +1189,10 @@ export async function getAttestorSet(
     };
   }
   try {
-    return await fetchJson<AttestorSetItem>(`/v1/attestor-sets/${id}`);
+    return await fetchJson<AttestorSetItem>(
+      `/v1/attestor-sets/${id}`,
+      ttl(TTL.ATTESTOR_SET_DETAIL),
+    );
   } catch {
     return null;
   }
@@ -1136,6 +1202,7 @@ export async function getAddress(addr: string): Promise<AddressDetail> {
   if (useMockApi) return getMockAddressDetail(addr);
   const raw = await fetchJson<ApiAddressSummaryResponse>(
     `/v1/addresses/${addr}`,
+    ttl(TTL.ADDRESS_SUMMARY),
   );
   return adaptAddressSummary(raw);
 }
@@ -1155,6 +1222,7 @@ export async function getAddressTxs(
   try {
     const raw = await fetchJson<Page<ApiTxResponse>>(
       `/v1/addresses/${encodeURIComponent(addr)}/txs?${qs}`,
+      ttl(TTL.ADDRESS_TXS),
     );
     return {
       items: raw.data.map(adaptTxResponse),
@@ -1172,8 +1240,11 @@ export async function getDripStatus(addr: string): Promise<DripStatus> {
   // shipped 2026-05). The wire shape matches `DripStatus` 1-to-1.
   if (useMockApi) return getMockDripStatus(addr);
   try {
+    // Drip throttle state is user-specific and time-sensitive — no
+    // caching. Same reason searchByQuery uses no-store.
     const raw = await fetchJson<ApiAddressDripStatusResponse>(
       `/v1/drip/status?address=${encodeURIComponent(addr)}`,
+      { cache: "no-store" },
     );
     return { can_drip: raw.can_drip, next_drip_at: raw.next_drip_at };
   } catch {
