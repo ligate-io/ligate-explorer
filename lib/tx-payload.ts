@@ -22,6 +22,13 @@ export interface SubmitAttestationDetails {
   schema_id: string
   payload_hash: string
   signature_count: number
+  /** Bech32m `lat1…` attestation id derived on the chain
+   *  (SHA-256(schema_id_bytes || payload_hash_bytes)). Present on
+   *  ligate-chain v0.2.0+ submit_attestation tx bodies; the explorer
+   *  treats it as optional so the tx-detail action card still renders
+   *  gracefully against pre-v0.2.0 indexers, just without the "view
+   *  attestation" link wrapping the payload hash. */
+  id?: string
 }
 
 export interface RegisterSchemaDetails {
@@ -59,12 +66,17 @@ export function readTransfer(
 export function readSubmitAttestation(
   details: Record<string, unknown>,
 ): SubmitAttestationDetails | null {
-  const { schema_id, payload_hash, signature_count } = details
+  const { schema_id, payload_hash, signature_count, id } = details
   if (!isStr(schema_id) || !isStr(payload_hash)) return null
   return {
     schema_id,
     payload_hash,
     signature_count: isNum(signature_count) ? signature_count : 0,
+    // Pre-v0.2.0 indexers omit this field; downstream code branches
+    // on `id == null` to decide whether to render the attestation-link
+    // affordance. Don't coerce to '' here, that would falsely promise
+    // a routable target.
+    id: isStr(id) ? id : undefined,
   }
 }
 

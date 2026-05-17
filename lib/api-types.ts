@@ -234,14 +234,18 @@ export type SearchResult =
   | { kind: 'address'; address: string }
   | { kind: 'schema'; schema_id: string }
   | { kind: 'attestor_set'; attestor_set_id: string }
-  | { kind: 'attestation'; schema_id: string; payload_hash: string }
+  | { kind: 'attestation'; id: string }
   | { kind: 'not_found'; query: string }
   | { kind: 'error'; message: string }
 
 // One row from /v1/attestations or its by-schema / by-set variants.
-// The new shape has nested `submitted_at` (block_height + tx_hash +
-// timestamp) instead of the older flat fields, and includes the
-// `id = lsc1…:lph1…` compound for routing to detail.
+// The shape has nested `submitted_at` (block_height + tx_hash +
+// timestamp) instead of the older flat fields, and includes a single
+// bech32m `id = lat1…` for routing to detail. The id is derived by
+// the chain (ligate-chain v0.2.0+) as
+// SHA-256(schema_id_bytes || payload_hash_bytes), bech32m-encoded
+// with the `lat` HRP. The pre-v0.2.0 compound `lsc1…:lph1…` form
+// is gone.
 export interface AttestationItem {
   id: string
   schema_id: string
