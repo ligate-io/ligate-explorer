@@ -729,17 +729,21 @@ export function StatsStrip({
 }: {
   info: { chain_id: string; latest_block: number; tx_per_second: number; finality: string; supply_nano: string }
 }) {
+  // "Latest block" tile lived here historically, but the BlockTickerCard
+  // immediately below shows the same number bigger + with live timing
+  // chrome (countdown bar, "expected any moment", indexer-lag hint). Two
+  // surfaces showing the same height also occasionally drifted by 1 when
+  // their separate poll cadences hit the api's 5s cache windows out of
+  // phase — confusing. BlockTickerCard is the single source of truth now.
   const tiles = [
     { label: 'Chain ID', value: info.chain_id, mono: true },
-    { label: 'Latest block', value: '#' + info.latest_block.toLocaleString(), mono: true },
     { label: 'TX / sec', value: formatTps(info.tx_per_second), serif: true },
     // "Block time" not "Finality" — `info.finality` now sources from
     // /v1/stats/next-block-eta.mean_block_interval_secs (rollup slot
     // production interval, ~6s on devnet), not the DA-layer settlement
-    // floor (~18s). The two were getting confused; the strip and the
-    // BlockTickerCard now read the same number under the same label.
-    // The full DA-settlement breakdown still lives on /info under
-    // "Finality breakdown".
+    // floor (~18s). The two were getting confused. The full
+    // DA-settlement breakdown still lives on /info under "Finality
+    // breakdown".
     { label: 'Block time', value: info.finality, mono: true },
     { label: 'LGT supply', value: fmtLgtCompact(info.supply_nano), mono: true },
     {

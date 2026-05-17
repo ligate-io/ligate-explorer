@@ -59,12 +59,42 @@ export function BlockTickerCard({ initialBlock }: { initialBlock: number }) {
     return () => clearInterval(id)
   }, [])
 
-  // Eta polling: every 4s, plus an immediate fetch on mount so the
-  // bar timer locks onto the real `last_block_height` quickly
-  // (otherwise we'd be reading the initialBlock prop for up to 4s
-  // before the first eta hit). Pauses on hidden tabs.
+  // Derived liveness state. Computed up here so the polling effect
+  // below can read `overdue` via a ref to decide whether to accelerate
+  // its poll cadence — the rest of the component reads these directly
+  // for chrome rendering.
+  const meanInterval = eta?.mean_block_interval_secs
+  const elapsed = (now - bumpAt) / 1000
+  const overdue = meanInterval != null && elapsed > meanInterval
+
+  // Adaptive eta polling.
+  //
+  // The api endpoint has a 5s Cache-Control TTL, so polling faster
+  // than that mostly hits cache. The trick is *catching the moment the
+  // cache expires* — at a 4s fixed cadence the worst case was ~8s of
+  // stale displayed height (poll right before block lands → wait 4s
+  // → cache served stale → poll again → fresh). That's the
+  // "freezes then jumps" the user kept hitting.
+  //
+  // Three liveness levers:
+  //   1. Base cadence is 2s, not 4s. We pay one extra fetch per
+  //      cache window, but the worst-case staleness drops to ~5+2s.
+  //   2. When we're past `expected_next_at` (overdueRef.current),
+  //      poll every 1s. We KNOW there's a block we haven't seen, no
+  //      reason to wait the full base interval.
+  //   3. Window 'focus' event triggers an immediate fetch. macOS
+  //      display dimming, alt-tab to another app, dragging the
+  //      window, etc. don't all fire 'visibilitychange', but they DO
+  //      fire 'focus' on return. Belt-and-suspenders with the
+  //      visibility handler.
+  //
+  // Implementation uses recursive setTimeout (not setInterval) so the
+  // delay can change between fires without tearing down the effect.
+  const overdueRef = useRef(false)
+  overdueRef.current = overdue
   useEffect(() => {
     let cancelled = false
+    let id: ReturnType<typeof setTimeout> | null = null
     const fetchEta = async () => {
       try {
         const res = await fetch(`${apiBase}/v1/stats/next-block-eta`, {
@@ -74,37 +104,54 @@ export function BlockTickerCard({ initialBlock }: { initialBlock: number }) {
         const body = (await res.json()) as NextBlockEta
         if (!cancelled) setEta(body)
       } catch {
-        /* swallow; next interval retries */
+        /* swallow; next tick retries */
       }
     }
-    fetchEta()
-    let id: ReturnType<typeof setInterval> | null = null
+    const scheduleNext = () => {
+      if (cancelled) return
+      const delay = overdueRef.current ? 1000 : 2000
+      id = setTimeout(async () => {
+        await fetchEta()
+        scheduleNext()
+      }, delay)
+    }
     const start = () => {
       if (id) return
-      id = setInterval(fetchEta, 4000)
+      scheduleNext()
     }
     const stop = () => {
       if (id) {
-        clearInterval(id)
+        clearTimeout(id)
         id = null
       }
     }
+    // Fires when the tab itself shows/hides (other tab activated,
+    // window minimised). Heavier-weight than 'focus'.
     const onVis = () => {
-      if (document.visibilityState === 'visible') start()
-      else stop()
+      if (document.visibilityState === 'visible') {
+        void fetchEta()
+        start()
+      } else {
+        stop()
+      }
+    }
+    // Fires whenever the window regains keyboard focus. Catches
+    // brief away-from-page events that don't trip 'visibilitychange'.
+    const onFocus = () => {
+      void fetchEta()
     }
     document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', onFocus)
+    void fetchEta()
     if (document.visibilityState === 'visible') start()
     return () => {
       cancelled = true
       document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', onFocus)
       stop()
     }
   }, [])
 
-  const meanInterval = eta?.mean_block_interval_secs
-  const elapsed = (now - bumpAt) / 1000
-  const overdue = meanInterval != null && elapsed > meanInterval
   const secondsLeft =
     meanInterval != null ? Math.max(0, meanInterval - elapsed) : null
   const progress =
