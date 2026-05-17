@@ -418,7 +418,11 @@ function ActionCard({ tx }: { tx: Tx }) {
           schemaId={a.schema_id}
           payloadHash={a.payload_hash}
           sigs={a.signature_count}
-          attestationId={`${a.schema_id}:${a.payload_hash}`}
+          // `id` is the chain-derived bech32m `lat1…` attestation id
+          // (ligate-chain v0.2.0+). Undefined on legacy indexers — the
+          // AttestationAction card then skips the "view attestation"
+          // link wrapping the payload hash and renders plain text.
+          attestationId={a.id}
         />
       )
   } else if (tx.type === 'RegisterSchema') {
@@ -589,7 +593,11 @@ function AttestationAction({
   schemaId: string
   payloadHash: string
   sigs: number
-  attestationId: string
+  /** Bech32m `lat1…` id from ligate-chain v0.2.0+. Optional so the
+   *  card still renders against legacy indexers — when missing, the
+   *  payload-hash cell is plain text instead of a link to the
+   *  attestation detail page. */
+  attestationId?: string
 }) {
   return (
     <div
@@ -634,13 +642,23 @@ function AttestationAction({
         >
           Payload hash
         </div>
-        <Link
-          href={`/attestation/${attestationId}`}
-          className="h-mono"
-          style={{ fontSize: 13, wordBreak: 'break-all' }}
-        >
-          {trunc(payloadHash, 12, 8)}
-        </Link>
+        {attestationId ? (
+          <Link
+            href={`/attestation/${attestationId}`}
+            className="h-mono"
+            style={{ fontSize: 13, wordBreak: 'break-all' }}
+          >
+            {trunc(payloadHash, 12, 8)}
+          </Link>
+        ) : (
+          <span
+            className="h-mono"
+            style={{ fontSize: 13, wordBreak: 'break-all' }}
+            title={payloadHash}
+          >
+            {trunc(payloadHash, 12, 8)}
+          </span>
+        )}
       </div>
       <div style={{ textAlign: 'right' }}>
         <div

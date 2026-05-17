@@ -92,21 +92,19 @@ async function searchFromBrowser(q: string): Promise<SearchResult> {
 // Bech32m HRP routing. Stable across api outages: the explorer routes
 // directly off the prefix. The api's /v1/search is reserved for the
 // cases the prefix can't fully resolve (`lph1…` alone needs the
-// schema_id lookup). Today the api is unreliable for `lsc1…`,
-// `las1…`, and the compound `lsc1…:lph1…` (returns `internal error`
-// or `not_found`), so client-side prefix routing is the primary path
-// and the api call is the fallback for `lph1…` only.
+// schema_id lookup). Today the api is unreliable for `lsc1…` and
+// `las1…` (returns `internal error` or `not_found`), so client-side
+// prefix routing is the primary path and the api call is the fallback
+// for `lph1…` only.
+//
+// `AttestationId` switched to a single bech32m id (`lat1…`) in
+// ligate-chain v0.2.0 (was a compound `lsc1…:lph1…` before); the
+// detection is now a single-HRP match like the others.
 //
 // Returns the route to push, or null when the input shape is unknown
 // and we need to fall through to the server-side resolver.
 function routeFromPrefix(input: string): string | null {
-  // Compound attestation id: `lsc1…:lph1…`. Detect first because both
-  // halves match the single-HRP regex below.
-  if (
-    /^lsc1[a-z0-9]+:lph1[a-z0-9]+$/i.test(input)
-  ) {
-    return `/attestation/${input}`
-  }
+  if (/^lat1[a-z0-9]+$/i.test(input)) return `/attestation/${input}`
   if (/^lsc1[a-z0-9]+$/i.test(input)) return `/schema/${input}`
   if (/^las1[a-z0-9]+$/i.test(input)) return `/attestor-set/${input}`
   if (/^ltx1[a-z0-9]+$/i.test(input)) return `/tx/${input}`
@@ -190,9 +188,7 @@ function SearchBar() {
           router.push(`/attestor-set/${result.attestor_set_id}`)
           return
         case 'attestation':
-          router.push(
-            `/attestation/${result.schema_id}:${result.payload_hash}`,
-          )
+          router.push(`/attestation/${result.id}`)
           return
         case 'error':
           // API itself failed (network / 5xx / unparseable). Surface
