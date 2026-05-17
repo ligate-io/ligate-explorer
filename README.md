@@ -63,22 +63,27 @@ The frontend is a thin renderer over `api.ligate.io`. No direct chain RPC, no Po
 | `/address/[addr]`   | Balance, tx count, first seen, role bond (sequencer / attester / prover), recent transactions |
 | `/schemas`          | Schema registry list with name, id, version, owner, threshold, attestation count |
 | `/schema/[id]`      | Schema detail: threshold ring, definition, fee routing & shape, recent attestations |
+| `/attestor-sets`    | Attestor sets list with set id, threshold, member count, schemas served |
+| `/attestor-set/[id]`| Attestor set detail: threshold, members, schemas served, recent attestations |
+| `/attestations`     | All attestations list with schema filter, attestor set, status, pagination |
+| `/attestation/[id]` | Attestation detail: schema, attestor set, signatures, payload, status |
 | `/faucet`           | One-button drip with circuit-trace backdrop, Server Action submit, success toast linking to tx |
 | `/info`             | Chain identity, full chain hash, RPC + API endpoints, resource cards    |
 
 Search bar in the header auto-routes by input shape: `lig1…` → `/address/[addr]`, `lsc1…` → `/schema/[id]`, 64-char hex → `/tx/[hash]`, digits → `/blocks/[height]`.
 
-Out of scope for v0: `/attestor-sets/[id]`, charts beyond the homepage widgets, wallet integration, light mode, i18n.
+Out of scope for v0: charts beyond the homepage widgets, wallet integration, light mode, i18n.
 
 ## Layout
 
 ```
 ligate-explorer/
-├── app/              Next.js 15 App Router (10 routes)
+├── app/              Next.js 15 App Router (14 routes)
 │   ├── globals.css   Tailwind v4 + full brand token set + utility classes
 │   ├── layout.tsx    MonoStrip + Header + main + Footer wrapper
 │   ├── page.tsx      Homepage dashboard
 │   ├── blocks/, tx/, txs/, schema/, schemas/, address/[addr]/
+│   ├── attestor-set/, attestor-sets/, attestation/, attestations/
 │   ├── faucet/       page.tsx + faucet-form.tsx + actions.ts (Server Action)
 │   └── info/
 ├── components/       Shared UI
@@ -91,10 +96,13 @@ ligate-explorer/
 │   ├── tables.tsx    BlocksTable + TxsTable (client; useRouter for click navigation)
 │   └── pagination.tsx
 ├── lib/
-│   ├── api.ts        Server-only API client (USE_MOCK_API toggle)
-│   ├── api-types.ts  Wire types
-│   ├── mock.ts       Typed fixtures (36 blocks, 60 txs, 5 schemas, addresses with roles)
-│   └── format.ts     trunc, ago, fmtLgt, isoDate, shortHash
+│   ├── api.ts            Server-only API client (USE_MOCK_API toggle)
+│   ├── api-browser.ts    Client-safe API helpers for browser code paths
+│   ├── api-types.ts      Wire types
+│   ├── mock.ts           Typed fixtures (36 blocks, 60 txs, 5 schemas, addresses with roles)
+│   ├── format.ts         trunc, ago, fmtLgt, isoDate, shortHash
+│   ├── tx-payload.ts     Tx payload decode + JSON shaping helpers
+│   └── use-live-poll.ts  Client hook for live polling (block ticker, etc.)
 └── public/           Favicons (mirrors ligate.io) + site.webmanifest
 ```
 
@@ -115,7 +123,7 @@ Set on Vercel for prod and in `.env.local` for dev. See [`.env.example`](.env.ex
 
 ## Brand
 
-Tokens mirror [`ligate-io/ligate-marketing`](https://github.com/ligate-io/ligate-marketing) — sage `#A7D28C` accent, obsidian `#0a0a0b` bg, bone `#EFEAD8` ink, Instrument Serif headings, Space Grotesk body, JetBrains Mono chrome. If a route doesn't feel brand-consistent, look at how `apps/landing/src/components/hero/Hero.tsx` does it and mirror the pattern.
+Tokens mirror [`ligate-io/ligate-marketing`](https://github.com/ligate-io/ligate-marketing) — sage `#A7D28C` accent, obsidian `#0a0a0b` bg, bone `#f4f2ec` ink, Instrument Serif headings, Space Grotesk body, JetBrains Mono chrome. If a route doesn't feel brand-consistent, look at how `apps/landing/src/components/hero/Hero.tsx` does it and mirror the pattern.
 
 ## Related
 
