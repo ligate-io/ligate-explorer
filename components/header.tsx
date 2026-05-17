@@ -38,7 +38,7 @@ function activeTab(pathname: string): string | null {
 function Wordmark() {
   return (
     <Link href="/" style={{ flexShrink: 0 }}>
-      <ExplorerLockup symbolSize={30} wordSize={18} />
+      <ExplorerLockup symbolSize={30} wordSize={22} />
     </Link>
   )
 }
