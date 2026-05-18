@@ -281,6 +281,44 @@ export default async function BlockPage({
                     <span style={{ color: 'var(--color-subtle)' }}>—</span>
                   ),
                 },
+                // DA block height + deep-link to Celenium. Only rendered when
+                // the api surfaces a height — slots ingested before chain
+                // v0.2.3 + ligate-api PR #63 don't have it. The link points
+                // at Celenium's Mocha testnet UI (`mocha.celenium.io`); when
+                // we move to Celestia mainnet this becomes `celenium.io`.
+                ...(block.da_block_height != null
+                  ? [
+                      {
+                        label: 'DA block',
+                        value: (
+                          <>
+                            <a
+                              href={`https://mocha.celenium.io/blocks/${block.da_block_height}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="h-mono link"
+                              title={`View Celestia mocha-4 block ${block.da_block_height} on Celenium`}
+                            >
+                              {block.da_block_height.toLocaleString()}
+                            </a>
+                            <span
+                              className="mono"
+                              style={{
+                                fontSize: 9,
+                                letterSpacing: '0.18em',
+                                textTransform: 'uppercase',
+                                color: 'var(--color-subtle)',
+                                marginLeft: 8,
+                              }}
+                              title="Celestia mocha-4 block height where this slot's first batch's blob was included. Click to view on Celenium."
+                            >
+                              view on celenium ↗
+                            </span>
+                          </>
+                        ),
+                      },
+                    ]
+                  : []),
                 { label: 'Tx count', value: block.tx_count },
                 {
                   label: 'Fees total',

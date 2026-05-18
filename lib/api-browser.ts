@@ -60,6 +60,13 @@ interface ApiBlockResponse {
   size_bytes: number | null
   finality_status?: 'pending' | 'finalized' | string
   finalized_at?: string | null
+  // Celestia DA block height where this slot's first batch landed.
+  // Surfaced by chain v0.2.3+ via receipt.da_block_height and threaded
+  // through ligate-api PR #63 onto BlockResponse. Absent on slots
+  // ingested before this lands. Same field as in api.ts; kept in
+  // parity here because both adapter files declare their own
+  // ApiBlockResponse mirror of the api's BlockResponse JSON.
+  da_block_height?: number | null
 }
 
 interface ApiTxResponse {
@@ -147,6 +154,7 @@ function adaptBlockResponse(r: ApiBlockResponse): Block {
     fees_total_nano: '0',
     finality_status: r.finality_status,
     finalized_at_ms: finalizedAtMs,
+    da_block_height: r.da_block_height ?? null,
   }
 }
 

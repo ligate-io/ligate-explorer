@@ -165,6 +165,12 @@ interface ApiBlockResponse {
   // RFC3339 ms timestamp the indexer observed pending → finalized.
   // Omitted while still pending or on legacy rows.
   finalized_at?: string | null;
+  // Celestia DA block height where this slot's first batch landed.
+  // Surfaced by chain v0.2.3+ via receipt.da_block_height and threaded
+  // through ligate-api PR #63 onto BlockResponse. `null` / absent on
+  // slots ingested before this lands; explorer treats absent as
+  // "no Celenium link to render".
+  da_block_height?: number | null;
 }
 
 /** RFC 0002 `Tx` body. */
@@ -445,6 +451,9 @@ function adaptBlockResponse(r: ApiBlockResponse): Block {
     fees_total_nano: "0",
     finality_status: r.finality_status,
     finalized_at_ms: finalizedAtMs,
+    // Pass-through: api emits `null` (or omits) when not populated;
+    // detail page checks `!= null` before rendering the Celenium link.
+    da_block_height: r.da_block_height ?? null,
   };
 }
 
