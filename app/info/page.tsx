@@ -51,12 +51,12 @@ export default async function InfoPage() {
       value: i.finality,
     },
     { label: 'DA layer', value: i.da_layer },
-    // "API version" not "Node version" — /v1/info.version is the api
-    // server's own Cargo crate version (currently "0.0.1"), not the
-    // chain node's binary version. The api doesn't expose the chain
-    // node version anywhere; if/when it does (say a /v1/version
-    // endpoint), add a second tile for that.
-    { label: 'API version', value: i.version },
+    // `i.version` is the chain node version. The api proxies it
+    // straight through from the upstream chain's /v1/info. Was labeled
+    // "API version" historically when the field actually carried the
+    // api server's own Cargo crate version; the api was updated to
+    // surface the chain version instead.
+    { label: 'Chain version', value: i.version },
   ]
 
   return (
