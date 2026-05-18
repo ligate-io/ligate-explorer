@@ -293,7 +293,10 @@ export default async function BlockPage({
                         value: (
                           <>
                             <a
-                              href={`https://mocha.celenium.io/blocks/${block.da_block_height}`}
+                              // Celenium routes block detail under `/block/{height}` (singular).
+                              // The list page is `/blocks` (plural), which is the easy footgun:
+                              // `/blocks/{height}` 404s. Keep this singular.
+                              href={`https://mocha.celenium.io/block/${block.da_block_height}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="h-mono link"
