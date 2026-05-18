@@ -57,7 +57,8 @@ export interface Block {
    *  threaded from chain v0.2.3's `receipt.da_block_height`
    *  (ligate-io/ligate-chain#355). Powers the "View on Celenium"
    *  deep-link on the block detail page:
-   *  `https://mocha.celenium.io/blocks/{da_block_height}`. Absent on
+   *  `https://mocha.celenium.io/block/{da_block_height}` (singular
+   *  `/block/`; the plural `/blocks` is the list page). Absent on
    *  legacy slots ingested before chain v0.2.3 + api PR #63. */
   da_block_height?: number | null
 }
