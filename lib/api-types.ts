@@ -120,10 +120,11 @@ export interface Schema {
 export interface ChainInfo {
   chain_id: string
   chain_hash: string
-  /** /v1/info.version — the API server's own Cargo crate version,
-   *  NOT the chain node binary version. The api doesn't currently
-   *  expose the node version anywhere. Render under "API version",
-   *  not "Node version". */
+  /** /v1/info.version — the chain node version. The api proxies it
+   *  through from the upstream chain's /v1/info; render under
+   *  "Chain version". (Was the api server's own crate version
+   *  historically, before the api flipped to surfacing the chain
+   *  version directly.) */
   version: string
   latest_block: number
   tx_per_second: number
