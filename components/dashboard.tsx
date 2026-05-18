@@ -206,11 +206,22 @@ function deterministicSeq(seed: number, count: number): number[] {
   return out
 }
 
-// 24-hour transaction trend. Take a `bars` prop (one per day, ordered
-// oldest → newest) sourced from /v1/stats/tx-rate-daily. Single-day
-// view degrades to a one-bar rendering plus an honest "no activity"
-// state when the chain hasn't seen any txs at all.
-export function Tx24hCard({ bars: barsProp }: { bars?: number[] }) {
+// Multi-day transaction trend. Takes a `bars` prop (one count per day,
+// oldest → newest) sourced from /v1/stats/tx-rate-daily, plus `days`
+// for the corner-label window. Sparse windows degrade to an honest
+// "no activity" state when the chain hasn't seen any txs at all.
+//
+// Was `Tx24hCard` historically, when the card was meant to read 24
+// hourly bars; the data has actually been daily for a while and the
+// label drifted out of sync. Now generic on `days` so the home page
+// can ask for any window (currently 30d) and the chrome stays honest.
+export function TxTrendCard({
+  bars: barsProp,
+  days = 30,
+}: {
+  bars?: number[]
+  days?: number
+}) {
   const bars = barsProp && barsProp.length > 0 ? barsProp : []
   const total = bars.reduce((a, b) => a + b, 0)
   const max = Math.max(1, ...bars)
@@ -218,11 +229,6 @@ export function Tx24hCard({ bars: barsProp }: { bars?: number[] }) {
     bars.length >= 2 && bars[0] > 0
       ? ((bars[bars.length - 1] - bars[0]) / bars[0]) * 100
       : 0
-  const labels = bars.length === 24
-    ? [0, 6, 12, 18]
-    : Array.from({ length: Math.min(4, bars.length) }, (_, i) =>
-        Math.round((i * (bars.length - 1)) / 3),
-      )
 
   return (
     <FrameCard padding={22}>
@@ -274,7 +280,7 @@ export function Tx24hCard({ bars: barsProp }: { bars?: number[] }) {
             color: 'var(--color-subtle)',
           }}
         >
-          24h
+          {days}d
         </span>
       </div>
       {bars.length === 0 ? (
@@ -340,25 +346,6 @@ export function Tx24hCard({ bars: barsProp }: { bars?: number[] }) {
           })}
         </svg>
       )}
-      {bars.length === 24 ? (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginTop: 4,
-          }}
-        >
-          {labels.map((h) => (
-            <span
-              key={h}
-              className="mono"
-              style={{ fontSize: 9, color: 'var(--color-subtle)' }}
-            >
-              {h}h
-            </span>
-          ))}
-        </div>
-      ) : null}
     </FrameCard>
   )
 }

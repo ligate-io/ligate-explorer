@@ -15,7 +15,7 @@ import {
   DailyAttestationsCard,
   FeeTrackerCard,
   SupplyCard,
-  Tx24hCard,
+  TxTrendCard,
 } from '@/components/dashboard'
 import { HeroBackdrop } from '@/components/hero-backdrop'
 import {
@@ -45,7 +45,7 @@ export const revalidate = 0
 //   polling its own endpoint on a 6s cadence. The server pass renders
 //   the initial data — so first paint is fully populated, no skeleton
 //   flicker — and from then on only the live cards re-render. Static
-//   cards (Hero, Supply, 24h tx, Daily attestations, Attestor sets,
+//   cards (Hero, Supply, 30d tx, Daily attestations, Attestor sets,
 //   Fee tracker) stay mounted and never re-paint.
 //
 // First-paint skeleton lives in `app/loading.tsx` and shows only on
@@ -167,17 +167,19 @@ async function StatsStripData() {
 }
 
 async function Row1() {
-  const [info, totals, txRate7d] = await Promise.all([
+  const [info, totals, txRate30d] = await Promise.all([
     getInfo(),
     getStatsTotals().catch(() => null),
-    getTxRateDaily(7),
+    getTxRateDaily(30),
   ])
   // Daily tx counts → bars[]: oldest first, summed across kind+outcome.
+  // 30-day window matches the DailyAttestationsCard heatmap below it so
+  // both trend surfaces show the same time horizon at a glance.
   const dailyByDate = new Map<string, number>()
-  for (const p of txRate7d) {
+  for (const p of txRate30d) {
     dailyByDate.set(p.date, (dailyByDate.get(p.date) ?? 0) + p.count)
   }
-  const txBars7d = [...dailyByDate.entries()]
+  const txBars30d = [...dailyByDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, c]) => c)
   return (
@@ -201,9 +203,9 @@ async function Row1() {
         treasuryNano={totals?.treasury_balance_nano}
         treasuryAddress={totals?.treasury_address}
       />
-      {/* Static: 7-day rollup, refreshes once per day worth of data.
+      {/* Static: 30-day rollup, refreshes once per day worth of data.
           Don't burn polling cycles on it. */}
-      <Tx24hCard bars={txBars7d} />
+      <TxTrendCard bars={txBars30d} days={30} />
     </div>
   )
 }
