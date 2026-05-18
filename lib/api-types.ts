@@ -52,6 +52,14 @@ export interface Block {
   /** ms-since-epoch when the indexer observed pending → finalized.
    *  Omitted while still pending or on legacy rows. */
   finalized_at_ms?: number | null
+  /** Celestia (DA) block height where this slot's first batch's blob
+   *  was included. Source: ligate-api `BlockResponse.da_block_height`,
+   *  threaded from chain v0.2.3's `receipt.da_block_height`
+   *  (ligate-io/ligate-chain#355). Powers the "View on Celenium"
+   *  deep-link on the block detail page:
+   *  `https://mocha.celenium.io/blocks/{da_block_height}`. Absent on
+   *  legacy slots ingested before chain v0.2.3 + api PR #63. */
+  da_block_height?: number | null
 }
 
 export interface TxEvent {
