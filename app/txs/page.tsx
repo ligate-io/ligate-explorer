@@ -121,8 +121,8 @@ export default async function TxsPage({
           }}
         >
           {all.length.toLocaleString()} transactions across{' '}
-          {blockSpan} recent blocks. Filter by module, follow the
-          lifecycle, click any hash to inspect.
+          {blockSpan} recent blocks. Filter by kind, follow the
+          lifecycle, click any hash to read the full payload.
         </p>
       </div>
 

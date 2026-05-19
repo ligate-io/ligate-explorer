@@ -47,8 +47,9 @@ export default async function AttestationsPage({
           }}
         >
           An attestation binds a payload hash to the schema it was submitted
-          under and the attestor set whose threshold signed it. The chain
-          stores the hash and the signatures, never the payload itself.
+          under and the attestor set whose threshold signed it. Only the
+          hash and the signatures land on chain; the payload itself stays
+          off.
         </p>
       </div>
       <FrameCard padding={0} scrollX>

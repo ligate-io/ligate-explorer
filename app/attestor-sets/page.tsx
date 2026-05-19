@@ -46,9 +46,9 @@ export default async function AttestorSetsPage({
             marginTop: 20,
           }}
         >
-          An attestor set is a quorum of public keys plus a threshold. Schemas
-          bind to a set; an attestation is valid only if enough of the set
-          signed it.
+          An attestor set is a quorum of public keys plus a signing
+          threshold. Schemas bind to a set; an attestation only counts when
+          enough members of that set sign it.
         </p>
       </div>
       <FrameCard padding={0} scrollX>
