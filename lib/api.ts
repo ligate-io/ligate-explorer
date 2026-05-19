@@ -1,6 +1,5 @@
 import "server-only";
 
-import { getMockAddressDetail, getMockDripStatus, mockData } from "./mock";
 import type {
   AddressDetail,
   AttestationDailyPoint,
@@ -23,7 +22,6 @@ import type {
   TxType,
 } from "./api-types";
 
-const useMockApi = process.env.USE_MOCK_API !== "false";
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://api.ligate.io";
 const rpcBase = process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.ligate.io";
 // Genesis-pinned token id for $LGT on ligate-devnet-1. The chain's
@@ -567,12 +565,15 @@ function adaptDripResponse(r: ApiDripResponse): DripResult {
 }
 
 // ---------------------------------------------------------------------------
-// Exported fetchers — same signatures as before, real fetches when
-// `USE_MOCK_API=false`.
+// Exported fetchers. All hit the live api at `apiBase` — there's no
+// mock fallback. Was previously gated on a `USE_MOCK_API` env var with
+// a 100% synthetic fixture branch, but the two surfaces drifted out of
+// sync (mock had no attestations, hardcoded supply, fake heights) and
+// the env-var default kept silently dropping dev into mock mode. Now
+// dev hits api.ligate.io same as prod; offline UI work is unsupported.
 // ---------------------------------------------------------------------------
 
 export async function getInfo(): Promise<ChainInfo> {
-  if (useMockApi) return mockData.info;
   // Five fetches in parallel:
   //   - /v1/info                 chain identity + indexer height
   //   - /v1/txs                  recent-tx sample for tps
@@ -632,18 +633,6 @@ export async function getInfo(): Promise<ChainInfo> {
 // ---------------------------------------------------------------------------
 
 export async function getFinalityStats(): Promise<FinalityStats | null> {
-  if (useMockApi) {
-    return {
-      window: "static",
-      sampled_count: 0,
-      p50_seconds: 12,
-      p95_seconds: 15,
-      p99_seconds: 15,
-      da_layer: "celestia-mocha",
-      source: "estimated",
-      as_of: new Date().toISOString(),
-    };
-  }
   try {
     return await fetchJson<FinalityStats>("/v1/stats/finality", ttl(TTL.STATS_FINALITY));
   } catch {
@@ -719,7 +708,6 @@ export async function getAttestationItems(
   cursor?: string,
   limit = 20,
 ): Promise<PageResult<AttestationItem>> {
-  if (useMockApi) return { items: [], nextCursor: null };
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   try {
@@ -736,7 +724,6 @@ export async function getAttestationItems(
 export async function getAttestationItem(
   id: string,
 ): Promise<AttestationItem | null> {
-  if (useMockApi) return null;
   try {
     return await fetchJson<AttestationItem>(
       `/v1/attestations/${id}`,
@@ -754,7 +741,6 @@ export async function getAttestorSetItems(
   cursor?: string,
   limit = 20,
 ): Promise<PageResult<AttestorSetItem>> {
-  if (useMockApi) return { items: [], nextCursor: null };
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   try {
@@ -773,7 +759,6 @@ export async function getSchemaAttestations(
   cursor?: string,
   limit = 20,
 ): Promise<PageResult<AttestationItem>> {
-  if (useMockApi) return { items: [], nextCursor: null };
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   try {
@@ -792,7 +777,6 @@ export async function getAttestorSetAttestationsList(
   cursor?: string,
   limit = 20,
 ): Promise<PageResult<AttestationItem>> {
-  if (useMockApi) return { items: [], nextCursor: null };
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   try {
@@ -814,23 +798,6 @@ export async function getAttestorSetAttestationsList(
 // ---------------------------------------------------------------------------
 
 export async function getStatsTotals(): Promise<StatsTotals> {
-  if (useMockApi) {
-    return {
-      indexed_at_slot: mockData.info.latest_block,
-      blocks: mockData.blocks.length,
-      txs_total: mockData.txs.length,
-      txs_committed: mockData.txs.filter((t) => t.status === "SUCCESS").length,
-      addresses: mockData.addresses.length,
-      schemas: mockData.schemas.length,
-      attestor_sets: mockData.attestorSets?.length ?? 0,
-      attestations: mockData.attestations?.length ?? 0,
-      // 1B LGT genesis pin — matches the live api now that PR #42
-      // landed (supply query was hitting a hex path the chain rejected;
-      // switched to bech32m token_…). Keeping the mock in sync so
-      // mock-mode renders the same number.
-      total_supply_nano: "1000000000000000000",
-    };
-  }
   return fetchJson<StatsTotals>("/v1/stats/totals", ttl(TTL.STATS_TOTALS));
 }
 
@@ -839,24 +806,6 @@ export async function getStatsTotals(): Promise<StatsTotals> {
 // fetches on mount, then polls every ~10s; the timer between fetches
 // runs purely client-side off `expected_next_at`.
 export async function getNextBlockEta(): Promise<NextBlockEta | null> {
-  if (useMockApi) {
-    // Synthetic tick so the BlockTickerCard renders sensibly under
-    // mock mode. Pretend the last block landed 3s ago and the next is
-    // 9s away (chain runs ~12s slots).
-    const now = Date.now();
-    const lastTs = new Date(now - 3000).toISOString();
-    const expected = new Date(now + 9000).toISOString();
-    return {
-      last_block_height: mockData.info.latest_block,
-      last_block_timestamp: lastTs,
-      mean_block_interval_secs: 12,
-      p95_block_interval_secs: 14.5,
-      expected_next_at: expected,
-      seconds_since_last: 3,
-      seconds_until_expected: 9,
-      indexer_lag_secs: 0,
-    };
-  }
   try {
     return await fetchJson<NextBlockEta>(
       "/v1/stats/next-block-eta",
@@ -868,7 +817,6 @@ export async function getNextBlockEta(): Promise<NextBlockEta | null> {
 }
 
 export async function getTxRateDaily(days = 1): Promise<TxRatePoint[]> {
-  if (useMockApi) return [];
   try {
     const r = await fetchJson<{ days: number; points: TxRatePoint[] }>(
       `/v1/stats/tx-rate-daily?days=${days}`,
@@ -887,7 +835,6 @@ export async function getTxRateDaily(days = 1): Promise<TxRatePoint[]> {
 export async function getAttestationsDaily(
   days = 30,
 ): Promise<AttestationDailyPoint[]> {
-  if (useMockApi) return [];
   try {
     const r = await fetchJson<{ days: number; points: AttestationDailyPoint[] }>(
       `/v1/stats/attestations-daily?days=${days}`,
@@ -900,7 +847,6 @@ export async function getAttestationsDaily(
 }
 
 export async function getTopHolders(n = 10): Promise<TopHolder[]> {
-  if (useMockApi) return [];
   try {
     const r = await fetchJson<{ source: string; holders: TopHolder[] }>(
       `/v1/stats/top-holders?n=${n}`,
@@ -913,7 +859,6 @@ export async function getTopHolders(n = 10): Promise<TopHolder[]> {
 }
 
 export async function getLatestBlocks(limit = 20): Promise<Block[]> {
-  if (useMockApi) return mockData.blocks.slice(0, limit);
   const raw = await fetchJson<Page<ApiBlockResponse>>(
     `/v1/blocks?limit=${limit}`,
     ttl(TTL.BLOCKS_LIST),
@@ -922,7 +867,6 @@ export async function getLatestBlocks(limit = 20): Promise<Block[]> {
 }
 
 export async function getAllBlocks(): Promise<Block[]> {
-  if (useMockApi) return mockData.blocks;
   // Snapshot of the most-recent 100 blocks, used for header stats
   // (avg-tx / fees / max height) on `/blocks` and `/`. Paginated
   // drill-down is `getBlocksPage`.
@@ -935,24 +879,13 @@ export async function getAllBlocks(): Promise<Block[]> {
 
 /**
  * Cursor-paginated `/blocks` list. Forward-only; the explorer relies
- * on browser back for "prev", per RFC 0001.
- *
- * Mock mode: `cursor` is the decimal stringified start index into
- * `mockData.blocks`. Real mode: the chain api's opaque `before` value.
- * The explorer never inspects the cursor; it just round-trips it.
+ * on browser back for "prev", per RFC 0001. The cursor is the chain
+ * api's opaque `before` value, round-tripped without inspection.
  */
 export async function getBlocksPage(
   cursor?: string,
   limit = 25,
 ): Promise<PageResult<Block>> {
-  if (useMockApi) {
-    const start = cursor ? Math.max(0, parseInt(cursor, 10) || 0) : 0;
-    const items = mockData.blocks.slice(start, start + limit);
-    const next = start + limit < mockData.blocks.length
-      ? String(start + limit)
-      : null;
-    return { items, nextCursor: next };
-  }
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   const raw = await fetchJson<Page<ApiBlockResponse>>(
@@ -966,8 +899,6 @@ export async function getBlocksPage(
 }
 
 export async function getBlock(height: number): Promise<Block | null> {
-  if (useMockApi)
-    return mockData.blocks.find((b) => b.height === height) ?? null;
   try {
     const raw = await fetchJson<ApiBlockResponse>(
       `/v1/blocks/${height}`,
@@ -980,7 +911,6 @@ export async function getBlock(height: number): Promise<Block | null> {
 }
 
 export async function getLatestTxs(limit = 20): Promise<Tx[]> {
-  if (useMockApi) return mockData.txs.slice(0, limit);
   const raw = await fetchJson<Page<ApiTxResponse>>(
     `/v1/txs?limit=${limit}`,
     ttl(TTL.TXS_LIST),
@@ -989,7 +919,6 @@ export async function getLatestTxs(limit = 20): Promise<Tx[]> {
 }
 
 export async function getAllTxs(): Promise<Tx[]> {
-  if (useMockApi) return mockData.txs;
   const raw = await fetchJson<Page<ApiTxResponse>>(
     "/v1/txs?limit=100",
     ttl(TTL.TXS_LIST),
@@ -1001,24 +930,12 @@ export async function getAllTxs(): Promise<Tx[]> {
  * Cursor-paginated `/txs` list. Optional `kind` narrows by tx kind
  * (transfer / submit_attestation / register_schema / ...) and survives
  * pagination via the same `kind` query param baked into the next URL.
- *
- * Mock mode honours `kind` against `mockData.txs[*].type` (which uses
- * the explorer's PascalCase) by mapping it back to the wire kind.
  */
 export async function getTxsPage(
   cursor?: string,
   limit = 25,
   kind?: string | null,
 ): Promise<PageResult<Tx>> {
-  if (useMockApi) {
-    const pool = kind
-      ? mockData.txs.filter((t) => wireKindOf(t.type) === kind)
-      : mockData.txs;
-    const start = cursor ? Math.max(0, parseInt(cursor, 10) || 0) : 0;
-    const items = pool.slice(start, start + limit);
-    const next = start + limit < pool.length ? String(start + limit) : null;
-    return { items, nextCursor: next };
-  }
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   if (kind) qs.set("kind", kind);
@@ -1029,29 +946,7 @@ export async function getTxsPage(
   };
 }
 
-/**
- * Map the explorer's PascalCase `TxType` back to the wire snake_case
- * `kind`. Used in mock mode so the kind filter behaves like the real
- * api. `Transfer` covers any unknown wire kind on the way in (see
- * `kindToTxType`); on the way out, treat it as `transfer` and ignore
- * the ambiguity for unknown txs (they're filtered out, which is
- * fine because `Unknown` isn't a user-selectable filter today).
- */
-function wireKindOf(t: string): string {
-  switch (t) {
-    case "Transfer":
-      return "transfer";
-    case "RegisterSchema":
-      return "register_schema";
-    case "SubmitAttestation":
-      return "submit_attestation";
-    default:
-      return t.toLowerCase();
-  }
-}
-
 export async function getTx(hash: string): Promise<Tx | null> {
-  if (useMockApi) return mockData.txs.find((t) => t.hash === hash) ?? null;
   try {
     const raw = await fetchJson<ApiTxResponse>(`/v1/txs/${hash}`, ttl(TTL.TX_DETAIL));
     return adaptTxResponse(raw);
@@ -1065,7 +960,6 @@ export async function getTxsForBlock(height: number): Promise<Tx[]> {
   // 100-row scan + client-side filter, which silently missed a
   // block's txs when the block was older than the most recent 100
   // chain-wide txs. Now exact: api returns only this block's rows.
-  if (useMockApi) return mockData.txs.filter((t) => t.height === height);
   const raw = await fetchJson<Page<ApiTxResponse>>(
     `/v1/txs?block_height=${height}&limit=100`,
     ttl(TTL.TXS_FOR_BLOCK),
@@ -1111,7 +1005,6 @@ function adaptSchemaResponse(
 // home page's schemas card polls directly from the browser via
 // `fetchSchemasFromBrowser`.
 export async function getSchemas(): Promise<Schema[]> {
-  if (useMockApi) return mockData.schemas;
   const raw = await fetchJson<Page<ApiSchemaResponse>>(
     "/v1/schemas?limit=100",
     ttl(TTL.SCHEMAS_LIST),
@@ -1127,11 +1020,6 @@ export async function getSchemas(): Promise<Schema[]> {
 export async function getSchemasForSet(
   attestorSetId: string,
 ): Promise<Schema[]> {
-  if (useMockApi) {
-    return mockData.schemas.filter(
-      (s) => s.attestor_set_id === attestorSetId,
-    );
-  }
   try {
     const raw = await fetchJson<Page<ApiSchemaResponse>>(
       `/v1/schemas?attestor_set_id=${encodeURIComponent(attestorSetId)}&limit=100`,
@@ -1144,8 +1032,6 @@ export async function getSchemasForSet(
 }
 
 export async function getSchema(id: string): Promise<Schema | null> {
-  if (useMockApi)
-    return mockData.schemas.find((s) => s.schema_id === id) ?? null;
   let raw: ApiSchemaResponse;
   try {
     raw = await fetchJson<ApiSchemaResponse>(
@@ -1192,24 +1078,6 @@ export async function getSchema(id: string): Promise<Schema | null> {
 export async function getAttestorSet(
   id: string,
 ): Promise<AttestorSetItem | null> {
-  if (useMockApi) {
-    const m = mockData.attestorSets.find((s) => s.attestor_set_id === id);
-    if (!m) return null;
-    return {
-      id: m.attestor_set_id,
-      members: m.members,
-      threshold: m.threshold,
-      schema_count: m.schema_count,
-      // Mock fixtures don't track a real registered_at — synthesize
-      // a sentinel block_height of 0 so the detail page's "registered
-      // in #N" copy still has a number to render under USE_MOCK_API.
-      registered_at: {
-        block_height: 0,
-        tx_hash: "",
-        timestamp: "",
-      },
-    };
-  }
   try {
     return await fetchJson<AttestorSetItem>(
       `/v1/attestor-sets/${id}`,
@@ -1221,7 +1089,6 @@ export async function getAttestorSet(
 }
 
 export async function getAddress(addr: string): Promise<AddressDetail> {
-  if (useMockApi) return getMockAddressDetail(addr);
   const raw = await fetchJson<ApiAddressSummaryResponse>(
     `/v1/addresses/${addr}`,
     ttl(TTL.ADDRESS_SUMMARY),
@@ -1238,7 +1105,6 @@ export async function getAddressTxs(
   cursor?: string,
   limit = 20,
 ): Promise<PageResult<Tx>> {
-  if (useMockApi) return { items: [], nextCursor: null };
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   try {
@@ -1256,11 +1122,8 @@ export async function getAddressTxs(
 }
 
 export async function getDripStatus(addr: string): Promise<DripStatus> {
-  // Mock mode keeps the deterministic "fresh address can drip"
-  // answer for local development without booting the api. Real mode
-  // calls the per-address branch of `/v1/drip/status` (ligate-api#5,
+  // Calls the per-address branch of `/v1/drip/status` (ligate-api#5,
   // shipped 2026-05). The wire shape matches `DripStatus` 1-to-1.
-  if (useMockApi) return getMockDripStatus(addr);
   try {
     // Drip throttle state is user-specific and time-sensitive — no
     // caching. Same reason searchByQuery uses no-store.
@@ -1279,16 +1142,6 @@ export async function getDripStatus(addr: string): Promise<DripStatus> {
 }
 
 export async function requestDrip(addr: string): Promise<DripResult> {
-  if (useMockApi) {
-    const hash =
-      "ltx1" +
-      Array.from(
-        { length: 56 },
-        () =>
-          "qpzry9x8gf2tvdw0s3jn54khce6mua7l"[Math.floor(Math.random() * 32)],
-      ).join("");
-    return { tx_hash: hash, amount_nano: "100000000000" };
-  }
   const raw = await fetchJson<ApiDripResponse>("/v1/drip", {
     method: "POST",
     headers: { "content-type": "application/json" },
