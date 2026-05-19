@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { getAllTxs, getTxsPage } from '@/lib/api'
-import type { TxType } from '@/lib/api-types'
+import type { Tx, TxStatus, TxType } from '@/lib/api-types'
 import { TxsTable } from '@/components/tables'
 import { Eyebrow, FrameCard } from '@/components/ui'
 import { Pagination } from '@/components/pagination'
@@ -19,6 +19,31 @@ const TYPES: ('All' | TxType)[] = [
   'BondSequencer',
   'SubmitProof',
 ]
+// Status filter UI labels. Distinct from `TxStatus` (SUCCESS/REVERTED/
+// PENDING) so the URL surface stays human-readable (`?status=Success`)
+// while the underlying enum stays uppercase. STATUS_MAP translates one
+// to the other; `null` for the All bucket means "don't filter".
+type StatusLabel = 'All' | 'Success' | 'Reverted' | 'Pending'
+const STATUSES: StatusLabel[] = ['All', 'Success', 'Reverted', 'Pending']
+const STATUS_MAP: Record<StatusLabel, TxStatus | null> = {
+  All: null,
+  Success: 'SUCCESS',
+  Reverted: 'REVERTED',
+  Pending: 'PENDING',
+}
+
+/**
+ * Build a `/txs[?kind][&status]` href, omitting empty params. Used by
+ * both the kind tab row and the status tab row so each tab preserves
+ * the other dimension's current selection when clicked.
+ */
+function buildTxsHref(kind: 'All' | TxType, status: StatusLabel): string {
+  const sp = new URLSearchParams()
+  if (kind !== 'All') sp.set('type', kind)
+  if (status !== 'All') sp.set('status', status)
+  const qs = sp.toString()
+  return qs ? `/txs?${qs}` : '/txs'
+}
 
 /**
  * Map PascalCase `TxType` (URL surface) to the wire snake_case `kind`
@@ -48,13 +73,19 @@ function pascalToWireKind(t: 'All' | TxType): string | null {
 export default async function TxsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cursor?: string; type?: string }>
+  searchParams: Promise<{ cursor?: string; type?: string; status?: string }>
 }) {
   const params = await searchParams
   const cursor = params.cursor
   const filter = (TYPES as string[]).includes(params.type ?? 'All')
     ? ((params.type ?? 'All') as 'All' | TxType)
     : 'All'
+  const statusFilter: StatusLabel = (STATUSES as string[]).includes(
+    params.status ?? 'All',
+  )
+    ? ((params.status ?? 'All') as StatusLabel)
+    : 'All'
+  const targetStatus = STATUS_MAP[statusFilter]
 
   // 100-tx snapshot for header stats + filter counts. Paged drill-down
   // table is its own cursor-aware fetch.
@@ -63,9 +94,21 @@ export default async function TxsPage({
     getTxsPage(cursor, PER_PAGE, pascalToWireKind(filter)),
   ])
   // Server filters on `?kind=` now (ligate-api PR #43). Unknown kinds
-  // come back as zero rows rather than 400, which is what we want.
-  // Trust the page result directly; no client-side fallback filter.
-  const rows = pageResult.items
+  // come back as zero rows rather than 400. The api does NOT filter on
+  // outcome / status though (the `outcome=…` param is silently ignored),
+  // so the status filter has to be applied client-side. When it's
+  // active we drop the server-paginated `pageResult.items` in favour
+  // of the 100-tx `all` sample, filtered both ways. Pagination hides
+  // in that mode (the full filtered set is shown in one go; devnet
+  // tx volume is well under the sample size).
+  const matchesKind = (t: Tx) => filter === 'All' || t.type === filter
+  const matchesStatus = (t: Tx) =>
+    targetStatus === null || t.status === targetStatus
+  const rows =
+    targetStatus === null
+      ? pageResult.items
+      : all.filter(matchesKind).filter(matchesStatus)
+  const paginationVisible = targetStatus === null
 
   const counts = {
     SubmitAttestation: all.filter((t) => t.type === 'SubmitAttestation').length,
@@ -164,9 +207,84 @@ export default async function TxsPage({
         ))}
       </div>
 
+      {/* Status filter row. Sits ABOVE the kind tab row because status
+          is the coarser axis (any kind can be Success / Reverted /
+          Pending). Counts here are the global per-status totals from
+          the 100-tx sample; they don't recompute against the current
+          kind filter, so they stay stable as the user clicks across
+          kinds (gives a sense of base rate). */}
       <div
         style={{
           marginTop: 40,
+          display: 'flex',
+          gap: 0,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
+      >
+        {STATUSES.map((s) => {
+          const active = statusFilter === s
+          const count =
+            s === 'All'
+              ? all.length
+              : s === 'Success'
+                ? success
+                : s === 'Reverted'
+                  ? reverted
+                  : pending
+          const dotColor =
+            s === 'Success'
+              ? 'var(--color-accent)'
+              : s === 'Reverted'
+                ? 'var(--color-coral)'
+                : s === 'Pending'
+                  ? 'var(--color-amber)'
+                  : 'var(--color-subtle)'
+          return (
+            <Link
+              key={s}
+              href={buildTxsHref(filter, s)}
+              className="mono"
+              style={{
+                background: 'transparent',
+                border: 0,
+                borderBottom: active
+                  ? '2px solid var(--color-accent)'
+                  : '2px solid transparent',
+                color: active ? 'var(--color-ink)' : 'var(--color-muted)',
+                padding: '14px 18px',
+                fontSize: 11,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                marginBottom: -1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              {s !== 'All' ? (
+                <span
+                  aria-hidden
+                  style={{
+                    display: 'inline-block',
+                    width: 6,
+                    height: 6,
+                    borderRadius: 999,
+                    background: dotColor,
+                  }}
+                />
+              ) : null}
+              {s}{' '}
+              <span style={{ color: 'var(--color-subtle)' }}>{count}</span>
+            </Link>
+          )
+        })}
+      </div>
+
+      <div
+        style={{
+          marginTop: 0,
           display: 'flex',
           gap: 0,
           alignItems: 'center',
@@ -178,7 +296,7 @@ export default async function TxsPage({
           const active = filter === t
           const count =
             t === 'All' ? all.length : counts[t as keyof typeof counts]
-          const href = t === 'All' ? '/txs' : `/txs?type=${t}`
+          const href = buildTxsHref(t, statusFilter)
           return (
             <Link
               key={t}
@@ -209,7 +327,7 @@ export default async function TxsPage({
       </div>
 
       <FrameCard padding={0} style={{ marginTop: 24 }} scrollX>
-        {rows.length === 0 && filter !== 'All' ? (
+        {rows.length === 0 && (filter !== 'All' || statusFilter !== 'All') ? (
           <div
             style={{
               padding: '48px 22px',
@@ -221,7 +339,14 @@ export default async function TxsPage({
               className="mono"
               style={{ fontSize: 11, letterSpacing: '0.18em' }}
             >
-              No {filter} transactions yet
+              No{' '}
+              {[
+                statusFilter !== 'All' ? statusFilter.toLowerCase() : null,
+                filter !== 'All' ? filter : null,
+              ]
+                .filter(Boolean)
+                .join(' ')}{' '}
+              transactions yet
             </span>
           </div>
         ) : (
@@ -229,13 +354,34 @@ export default async function TxsPage({
         )}
       </FrameCard>
 
-      <Pagination
-        basePath="/txs"
-        cursor={cursor}
-        nextCursor={pageResult.nextCursor}
-        itemsOnPage={rows.length}
-        extraParams={{ type: filter !== 'All' ? filter : undefined }}
-      />
+      {/* Pagination only shows when status filter is inactive. The
+          status-filtered view is sourced from the 100-tx `all` sample
+          and rendered in one go, so cursor pagination isn't meaningful
+          there (and the api doesn't filter on outcome anyway). */}
+      {paginationVisible ? (
+        <Pagination
+          basePath="/txs"
+          cursor={cursor}
+          nextCursor={pageResult.nextCursor}
+          itemsOnPage={rows.length}
+          extraParams={{
+            type: filter !== 'All' ? filter : undefined,
+          }}
+        />
+      ) : (
+        <div
+          className="mono"
+          style={{
+            marginTop: 24,
+            fontSize: 11,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: 'var(--color-subtle)',
+          }}
+        >
+          Showing {rows.length} {rows.length === 1 ? 'item' : 'items'}
+        </div>
+      )}
     </>
   )
 }
