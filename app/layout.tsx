@@ -23,6 +23,7 @@ import '@fontsource/jetbrains-mono/500.css'
 import '@fontsource/jetbrains-mono/600.css'
 import './globals.css'
 
+import { ApiHealthBanner } from '@/components/api-health-banner'
 import { Footer } from '@/components/footer'
 import { Header } from '@/components/header'
 
@@ -66,6 +67,11 @@ export default function RootLayout({
           flexDirection: 'column',
         }}
       >
+        {/* Sticky amber bar that appears when /v1/info has failed
+            2+ consecutive polls (api dead, Railway outage, etc.).
+            Renders nothing while healthy. Mounted above <Header />
+            so it sits at the very top of the viewport. */}
+        <ApiHealthBanner />
         <Header />
         <main
           className="page-anim"

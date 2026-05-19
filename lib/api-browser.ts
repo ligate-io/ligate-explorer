@@ -28,6 +28,17 @@ const apiBase = (
   process.env.NEXT_PUBLIC_API_URL ?? 'https://api.ligate.io'
 ).replace(/\/+$/, '')
 
+// Chain RPC base, used as a fallback for the chain head when the
+// indexed api is unreachable (Railway cold start, dyno restart, etc.).
+// Different infrastructure than api.ligate.io (the api is on Railway;
+// rpc.ligate.io is the chain node, fronted by Caddy — verified by the
+// `via: 1.1 Caddy` response header). RPC schema is the standard
+// Sovereign SDK ledger surface, documented at
+// https://rpc.ligate.io/v1/swagger-ui/.
+const rpcBase = (
+  process.env.NEXT_PUBLIC_RPC_URL ?? 'https://rpc.ligate.io'
+).replace(/\/+$/, '')
+
 // ---------------------------------------------------------------------
 // Wire shapes — same names + fields as the private interfaces in
 // lib/api.ts, redeclared here so this module stays self-contained and
@@ -203,14 +214,80 @@ function adaptSchemaResponse(r: ApiSchemaResponse): Schema {
 // last-good state on null.
 // ---------------------------------------------------------------------
 
+/**
+ * Browser fetch with a tiny retry loop for transient api failures.
+ * Targets the Railway cold-start case (the api dyno spins up in
+ * ~5-10s on first hit after idle) and one-off 5xx blips. Two retries
+ * with linear 500ms / 1.5s backoff — total worst-case latency added
+ * is ~2s before we give up and signal failure to the caller.
+ *
+ * Returns the Response on the first 2xx, `null` on final failure.
+ * Always uses `cache: 'no-store'` so each poll cycle hits the api;
+ * we don't want a stale in-browser cache to mask a fresh block.
+ */
 async function fetchOk(path: string): Promise<Response | null> {
+  const delays = [0, 500, 1500]
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt] > 0) {
+      await new Promise((r) => setTimeout(r, delays[attempt]))
+    }
+    try {
+      const res = await fetch(`${apiBase}${path}`, { cache: 'no-store' })
+      if (res.ok) return res
+      // 4xx is a client problem and won't get better with retry;
+      // bail out immediately. 5xx is worth one more try.
+      if (res.status >= 400 && res.status < 500) return null
+    } catch {
+      /* network error; retry */
+    }
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------
+// Chain RPC fallback. When the indexed api is unreachable we can still
+// get the chain head (number + hash + timestamp) from the chain node
+// directly via /v1/ledger/slots/latest. Everything else (paginated
+// history, attestation list, schema list, aggregated stats) is
+// indexer-only and has no RPC equivalent — those surfaces just stay
+// empty with the global "api unreachable" banner explaining why.
+// ---------------------------------------------------------------------
+
+interface RpcSlotResponse {
+  type: 'slot'
+  number: number
+  hash: string
+  state_root: string
+  timestamp: number
+  finality_status?: string
+}
+
+/**
+ * Latest slot from the chain RPC. Returns null if RPC is also down
+ * (different infra than the api, so usually works when api is down,
+ * but not always — Cloudflare zone-wide outage would take both out).
+ */
+export async function fetchChainHeadFromRpc(): Promise<RpcSlotResponse | null> {
   try {
-    const res = await fetch(`${apiBase}${path}`, { cache: 'no-store' })
+    const res = await fetch(`${rpcBase}/v1/ledger/slots/latest`, {
+      cache: 'no-store',
+    })
     if (!res.ok) return null
-    return res
+    return (await res.json()) as RpcSlotResponse
   } catch {
     return null
   }
+}
+
+/**
+ * Single-shot probe of api health. Used by the global ApiHealthBanner
+ * to decide whether to render the "api unreachable" warning. Just
+ * hits /v1/info with the same retry-on-failure semantics; returns
+ * true if any attempt got a 2xx.
+ */
+export async function pingApiHealth(): Promise<boolean> {
+  const res = await fetchOk('/v1/info')
+  return res !== null
 }
 
 /**
@@ -219,25 +296,52 @@ async function fetchOk(path: string): Promise<Response | null> {
  * "fresh" row highlight, the strip's "Latest block" tile, and the
  * BlockTickerCard's bar all advance off the same number.
  *
- * Returns null on any failure; caller keeps last-good value.
+ * On api failure, falls back to the chain RPC for the head height
+ * only (everything else — chain_hash, version, head_lag, totals.* —
+ * stays empty / sentinel). The caller still gets a populated
+ * ApiInfoResponse so the live cards can keep advancing the number
+ * even when the indexer is down. Returns null only when BOTH the
+ * api and the RPC are unreachable.
  */
 export async function fetchInfoFromBrowser(): Promise<{
   info: ApiInfoResponse
   totals: StatsTotals | null
+  /** True when the data came from the RPC fallback path (i.e. the
+   *  api was unreachable). UIs can use this to render a small
+   *  "RPC fallback" hint or to skip rendering fields the RPC can't
+   *  populate (chain_hash, version). */
+  fromRpc?: boolean
 } | null> {
   const [infoRes, totalsRes] = await Promise.all([
     fetchOk('/v1/info'),
     fetchOk('/v1/stats/totals'),
   ])
-  if (!infoRes) return null
-  try {
-    const info = (await infoRes.json()) as ApiInfoResponse
-    const totals = totalsRes
-      ? ((await totalsRes.json()) as StatsTotals)
-      : null
-    return { info, totals }
-  } catch {
-    return null
+  if (infoRes) {
+    try {
+      const info = (await infoRes.json()) as ApiInfoResponse
+      const totals = totalsRes
+        ? ((await totalsRes.json()) as StatsTotals)
+        : null
+      return { info, totals }
+    } catch {
+      /* fall through to RPC fallback */
+    }
+  }
+  // API path failed (network, 5xx, malformed body). Try RPC for the
+  // chain head — most live cards only really need the slot number.
+  const slot = await fetchChainHeadFromRpc()
+  if (!slot) return null
+  return {
+    info: {
+      chain_id: '',
+      chain_hash: '',
+      version: '',
+      indexer_height: slot.number,
+      head_height: slot.number,
+      head_lag_slots: 0,
+    },
+    totals: null,
+    fromRpc: true,
   }
 }
 

@@ -573,7 +573,67 @@ function adaptDripResponse(r: ApiDripResponse): DripResult {
 // dev hits api.ligate.io same as prod; offline UI work is unsupported.
 // ---------------------------------------------------------------------------
 
+// Minimal slot wire shape returned by /v1/ledger/slots/latest on the
+// chain RPC (rpc.ligate.io). Sov-SDK ledger surface. Used only by
+// `getInfo()`'s RPC fallback path — never by the regular api flow.
+interface RpcSlotResponse {
+  type: 'slot'
+  number: number
+  hash: string
+  state_root: string
+  timestamp: number
+  finality_status?: string
+}
+
+/**
+ * Synthesise a ChainInfo from the chain RPC's latest slot when the
+ * api is unreachable. RPC is on different infra than the api (Caddy
+ * fronting the chain node, vs Railway hosting the api), so it usually
+ * stays up when the api dies. Fields the RPC can't tell us
+ * (chain_id, chain_hash, tps, supply, da_layer) fall back to env
+ * defaults or empty sentinels; the explorer's `ApiHealthBanner`
+ * renders the "api unreachable" warning so users know why some
+ * fields are blank.
+ *
+ * Returns null when RPC is ALSO unreachable — the page-level error
+ * boundary handles that case.
+ */
+async function getInfoFromRpcFallback(): Promise<ChainInfo | null> {
+  try {
+    const slot = await fetchChain<RpcSlotResponse>('/v1/ledger/slots/latest');
+    return {
+      chain_id: '',
+      chain_hash: '',
+      version: '',
+      latest_block: slot.number,
+      tx_per_second: 0,
+      finality: fallbackFinality,
+      block_time_ms: null,
+      rpc_url: rpcBase,
+      api_url: apiBase,
+      supply_nano: fallbackLgtSupplyNano,
+      network_status: 'API unreachable · RPC fallback',
+      da_layer: daLayer,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function getInfo(): Promise<ChainInfo> {
+  try {
+    return await getInfoFromApi();
+  } catch {
+    const fallback = await getInfoFromRpcFallback();
+    if (fallback) return fallback;
+    // Both api AND rpc are unreachable. Throw so the page-level error
+    // boundary catches it; better to show the error page than render
+    // a broken UI built from junk defaults.
+    throw new Error('Both api and rpc are unreachable');
+  }
+}
+
+async function getInfoFromApi(): Promise<ChainInfo> {
   // Five fetches in parallel:
   //   - /v1/info                 chain identity + indexer height
   //   - /v1/txs                  recent-tx sample for tps
