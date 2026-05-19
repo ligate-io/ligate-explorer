@@ -23,6 +23,7 @@ import type {
 } from '@/lib/api-types'
 import {
   fetchAttestationsFromBrowser,
+  fetchInfoFromBrowser,
   fetchLatestBlocksFromBrowser,
   fetchLatestTxsFromBrowser,
   fetchSchemasFromBrowser,
@@ -360,5 +361,87 @@ export function LiveLatestTxs({ initial }: { initial: Tx[] }) {
         <TxsTable rows={txs} showBlock={false} compact />
       </FrameCard>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Blocks page top stats — "Latest block" + "Indexed blocks" cards.
+// Polls /v1/info + /v1/stats/totals every 6s so the head + indexed
+// count advance live while the user is on /blocks (mirrors the home
+// page's LiveStatsStrip behavior).
+//
+// The "Avg txs / block" + "Fees collected" cards next to these are
+// 100-block / 100-tx aggregates: changing them live would require
+// refetching the full sample on every tick. Cheap to skip; they only
+// drift slowly with chain activity and hard-nav refreshes them.
+// ---------------------------------------------------------------------
+
+function BlocksStatCard({
+  label,
+  value,
+  borderRight = false,
+}: {
+  label: string
+  value: string
+  borderRight?: boolean
+}) {
+  return (
+    <FrameCard
+      padding={20}
+      style={{
+        borderRight: borderRight ? '1px solid var(--color-line)' : 0,
+      }}
+    >
+      <div
+        className="mono"
+        style={{
+          fontSize: 10,
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: 'var(--color-subtle)',
+          marginBottom: 10,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        className="serif"
+        style={{
+          fontSize: 36,
+          lineHeight: 1,
+          color: 'var(--color-ink)',
+        }}
+      >
+        {value}
+      </div>
+    </FrameCard>
+  )
+}
+
+export function LiveBlocksTopStats({
+  initial,
+}: {
+  initial: { latestBlock: number; indexedBlocks: number }
+}) {
+  const [state, setState] = useState(initial)
+  useLivePoll(async () => {
+    const fresh = await fetchInfoFromBrowser()
+    if (!fresh) return
+    setState({
+      latestBlock: fresh.info.indexer_height ?? state.latestBlock,
+      indexedBlocks: fresh.totals?.blocks ?? state.indexedBlocks,
+    })
+  }, POLL_MS)
+  return (
+    <>
+      <BlocksStatCard
+        label="Latest block"
+        value={'#' + state.latestBlock.toLocaleString()}
+      />
+      <BlocksStatCard
+        label="Indexed blocks"
+        value={state.indexedBlocks.toLocaleString()}
+      />
+    </>
   )
 }

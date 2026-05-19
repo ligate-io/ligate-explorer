@@ -7,6 +7,7 @@ import {
 } from '@/lib/api'
 import { fmtLgtTrim } from '@/lib/format'
 import { BlocksTable } from '@/components/tables'
+import { LiveBlocksTopStats } from '@/components/live-cards'
 import { BlockSpark } from '@/components/svgs'
 import { Eyebrow, FrameCard } from '@/components/ui'
 import { Pagination } from '@/components/pagination'
@@ -61,14 +62,15 @@ export default async function BlocksPage({
 
   // Empty-state guard: if /v1/blocks returns zero rows (chain freshly
   // genesized, indexer behind, transient api failure), `all[0]` is
-  // undefined and the original `all[0].height.toLocaleString()` would
-  // throw. Render "—" so the page degrades instead of crashing.
-  const latestBlockLabel =
-    all[0]?.height != null ? '#' + all[0].height.toLocaleString() : '—'
+  // undefined. Fall through to 0; the LiveBlocksTopStats wrapper will
+  // overwrite both numbers on its first poll anyway.
+  const initialLatestBlock = all[0]?.height ?? 0
 
+  // First two stat cards (Latest block + Indexed blocks) are now
+  // rendered by <LiveBlocksTopStats> so they advance every 6s without
+  // a page reload. The remaining two are 100-block / 100-tx aggregates
+  // that drift slowly with chain activity, so they stay static here.
   const stats = [
-    { label: 'Latest block', value: latestBlockLabel, serif: true },
-    { label: 'Indexed blocks', value: indexedBlocks.toLocaleString(), serif: true },
     { label: 'Avg txs / block', value: avgTxs, serif: true },
     {
       label: 'Fees collected',
@@ -110,6 +112,16 @@ export default async function BlocksPage({
         className="grid-stats-4"
         style={{ marginTop: 40, gap: 0 }}
       >
+        {/* Two live cards on the left (Latest block + Indexed blocks)
+            self-polling on a 6s cadence. The two static cards below
+            cover the per-100 aggregates that don't tick on every new
+            slot. */}
+        <LiveBlocksTopStats
+          initial={{
+            latestBlock: initialLatestBlock,
+            indexedBlocks,
+          }}
+        />
         {stats.map((t, i) => {
           const hasSub = 'sub' in t && t.sub
           return (
