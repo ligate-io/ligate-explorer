@@ -102,7 +102,7 @@ export default async function BlocksPage({
             marginTop: 16,
           }}
         >
-          {all.length} blocks indexed. Every row is a sealed slot of attestations and transfers, with its DA blob settled to Celestia.
+          {all.length} blocks indexed. Every row is a sealed slot of attestations and transfers, newest first.
         </p>
       </div>
 
