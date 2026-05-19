@@ -23,7 +23,15 @@ import type {
   TxType,
 } from "./api-types";
 
-const useMockApi = process.env.USE_MOCK_API !== "false";
+// Real api is the default everywhere (dev + prod). Mock mode is now
+// opt-in via USE_MOCK_API=true — useful only for offline UI work
+// where the api isn't reachable. Was inverted previously (mock by
+// default unless USE_MOCK_API=false), which silently dropped local
+// dev into a synthetic data world that didn't match prod — the
+// homepage showed mock #1,247 / 60 fake txs while prod was at #59,900
+// with real attestations. Vercel still sets USE_MOCK_API unset (or
+// "false"), so prod behavior is unchanged.
+const useMockApi = process.env.USE_MOCK_API === "true";
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://api.ligate.io";
 const rpcBase = process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.ligate.io";
 // Genesis-pinned token id for $LGT on ligate-devnet-1. The chain's
