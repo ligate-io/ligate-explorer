@@ -131,10 +131,10 @@ function HeroText() {
             lineHeight: 1.55,
           }}
         >
-          ligate-devnet-1 went live 2026-05-15. Activity grows as Themisra
-          integrations, Mneme attestor pilots, and partner SDK builds come
-          online. Numbers below are real-time from the chain; if a card reads
-          zero, the chain hasn&apos;t seen that event yet.
+          Live state of Ligate&apos;s attestation chain. Block height,
+          transactions, schemas, attestor sets, attestations: every event
+          the chain has signed, streaming as it lands. A card reading zero
+          just means the chain hasn&apos;t seen that kind of activity yet.
         </p>
       </div>
     </section>

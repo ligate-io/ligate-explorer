@@ -33,7 +33,7 @@ export default async function SchemasPage() {
             marginTop: 20,
           }}
         >
-          Schemas declare the canonical structure of an attestation payload and the attestor set authorized to sign it.
+          Schemas declare what shape an attestation payload should take, and which attestor set is authorized to sign one.
         </p>
       </div>
       <FrameCard padding={0} scrollX>

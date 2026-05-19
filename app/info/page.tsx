@@ -85,7 +85,7 @@ export default async function InfoPage() {
           maxWidth: 600,
         }}
       >
-        Sovereign SDK rollup. Settles to Celestia. Designed to attest, not transfer. Devnet runs without slashing.
+        Sovereign SDK rollup on Celestia. Built to record attestations cheaply and verifiably, not to move value. Devnet runs without slashing.
       </p>
 
       <div
