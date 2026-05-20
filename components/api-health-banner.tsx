@@ -77,13 +77,18 @@ export function ApiHealthBanner() {
         zIndex: 70,
         background: 'var(--color-amber)',
         color: 'var(--color-bg)',
-        padding: '10px 24px',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        letterSpacing: '0.16em',
-        textTransform: 'uppercase',
+        padding: '12px 24px',
+        // Sans (Space Grotesk) with a bolder weight reads as more
+        // alert + authoritative than the original mono pill. Body
+        // text size + sentence case (no uppercase) so the message
+        // is scannable at a glance instead of being parsed letter-
+        // by-letter.
+        fontFamily: 'var(--font-sans)',
+        fontSize: 14,
+        fontWeight: 600,
+        letterSpacing: '-0.005em',
         textAlign: 'center',
-        borderBottom: '1px solid rgba(0,0,0,0.2)',
+        borderBottom: '1px solid rgba(0,0,0,0.25)',
       }}
     >
       API unreachable. Live chain head still ticking via RPC fallback;
