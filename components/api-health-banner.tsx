@@ -12,12 +12,13 @@ import { pingApiHealth } from '@/lib/api-browser'
 // with no explanation. The user can't tell if the chain is dead, the
 // indexer is dead, or they typed the wrong URL. The banner clarifies.
 //
-// Polling cadence: 30s. The live cards already poll /v1/info on a 6s
-// cadence (LiveStatsStrip, BlockTickerCard via eta) for their own
-// purposes; this banner runs independently with a longer interval
-// because its only job is to detect prolonged outages, not catch
-// every transient blip. A single failure is ignored; 2 consecutive
-// failures trip the banner.
+// Polling cadence: 10s. The api is normally sub-second; if it's not
+// answering for two consecutive 10s windows (each ping internally
+// retries with 500ms+1.5s backoff before giving up), it's down. End-
+// to-end: banner appears ~12s after a real outage (first ping fails
+// at ~2s after page load, second 10s later). Used to be 30s but
+// that's overcautious for a snappy api — the live cards on 6s polls
+// already react sooner than the banner did.
 //
 // On detection: the chain head still advances via the RPC fallback
 // path (see `fetchInfoFromBrowser` + `fetchChainHeadFromRpc`), so
@@ -25,7 +26,7 @@ import { pingApiHealth } from '@/lib/api-browser'
 // ticking. Indexed surfaces (paginated lists, search, attestation
 // listings, aggregated stats) stay empty because the chain RPC
 // can't replicate them.
-const POLL_MS = 30_000
+const POLL_MS = 10_000
 const FAIL_THRESHOLD = 2
 
 export function ApiHealthBanner() {
