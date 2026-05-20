@@ -107,14 +107,14 @@ export default function Loading() {
           </div>
         </div>
 
-        {/* Stats grid. Labels are static (Limit / Amount / Confirmation),
+        {/* Stats grid. Labels are static (Limit / Per drip / Confirmation),
             only the Confirmation value is async (it comes from getInfo)
             so it's the only field that gets a skel; the other two read
             their real fixed values immediately. */}
         <div className="grid-stats-3" style={{ marginTop: 56, gap: 24 }}>
           {[
             { k: 'Limit', v: '1 drip / address / 24h', skel: false },
-            { k: 'Amount', v: '100 LGT', skel: false },
+            { k: 'Per drip', v: '100 LGT', skel: false },
             { k: 'Confirmation', v: '', skel: true },
           ].map((it) => (
             <div key={it.k}>
@@ -142,6 +142,65 @@ export default function Loading() {
             </div>
           ))}
         </div>
+
+        {/* Discord callout mirror. Real content (not skel'd) because
+            it's static text — the page swap-in shows the same block. */}
+        <a
+          href="https://discord.gg/ZWUeJ8k3eP"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            marginTop: 32,
+            padding: '20px 24px',
+            border: '1px solid var(--color-line)',
+            background: 'var(--color-surface)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 20,
+            flexWrap: 'wrap',
+            textDecoration: 'none',
+            transition: 'border-color 0.15s ease',
+          }}
+          className="faucet-discord"
+        >
+          <div style={{ minWidth: 0 }}>
+            <div
+              className="mono"
+              style={{
+                fontSize: 10,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                color: 'var(--color-subtle)',
+                marginBottom: 6,
+              }}
+            >
+              Need more than 100 LGT?
+            </div>
+            <div
+              style={{
+                color: 'var(--color-bone)',
+                fontSize: 14,
+                lineHeight: 1.5,
+                maxWidth: 440,
+              }}
+            >
+              Ping us in #faucet on Discord and we&apos;ll route a larger drip for chain integration work.
+            </div>
+          </div>
+          <span
+            className="mono"
+            style={{
+              fontSize: 11,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: 'var(--color-accent)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Join Discord →
+          </span>
+        </a>
 
         <div
           style={{

@@ -205,6 +205,15 @@
   border: 1px solid var(--color-line);
 }
 
+/* Faucet Discord callout. Lights up its border in accent on hover so
+   the whole block reads as a single CTA target (the trailing "Join
+   Discord →" is the only chrome the user is meant to clue into;
+   highlighting the entire frame on hover prevents the "wait, is this
+   clickable?" pause). */
+.faucet-discord:hover {
+  border-color: var(--color-accent) !important;
+}
+
 /* Buttons ------------------------------------------------------------------ */
 button {
   font-family: inherit;
