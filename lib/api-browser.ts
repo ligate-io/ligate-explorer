@@ -385,7 +385,15 @@ export async function fetchStripInfoFromBrowser(
       /* keep fallback tps */
     }
   }
-  const { info, totals } = headRes
+  const { info, totals, fromRpc } = headRes
+  // When the data came from the RPC fallback (api was unreachable),
+  // override `network_status` to the unreachable-sentinel string —
+  // otherwise the live polling would compute "Synced" from the
+  // RPC-fallback shape (which always sets head_lag_slots: 0), and
+  // the dashboard would falsely claim everything is healthy while
+  // the api is actually down. The NetworkStatusValue tile in
+  // StatsStrip keys off the string to pick the coral "API DOWN ·
+  // RPC" pill.
   return {
     ...fallback,
     chain_id: info.chain_id,
@@ -394,8 +402,9 @@ export async function fetchStripInfoFromBrowser(
     latest_block: info.indexer_height ?? fallback.latest_block,
     tx_per_second: tps,
     supply_nano: totals?.total_supply_nano ?? fallback.supply_nano,
-    network_status:
-      info.head_lag_slots == null
+    network_status: fromRpc
+      ? 'API unreachable · RPC fallback'
+      : info.head_lag_slots == null
         ? fallback.network_status
         : info.head_lag_slots === 0
           ? 'Synced'
