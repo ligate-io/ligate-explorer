@@ -182,10 +182,22 @@ export default function Loading() {
                 color: 'var(--color-bone)',
                 fontSize: 14,
                 lineHeight: 1.5,
-                maxWidth: 440,
+                maxWidth: 460,
               }}
             >
-              Ping us in #faucet on Discord and we&apos;ll route a larger drip for chain integration work.
+              Run the{' '}
+              <span
+                className="mono"
+                style={{
+                  color: 'var(--color-accent)',
+                  fontSize: 13,
+                  padding: '1px 6px',
+                  border: '1px solid var(--color-line-2)',
+                }}
+              >
+                /faucet
+              </span>{' '}
+              command in our Discord and the bot routes a larger drip for chain integration work.
             </div>
           </div>
           <span

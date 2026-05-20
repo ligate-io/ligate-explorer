@@ -89,8 +89,9 @@ export default async function FaucetPage() {
 
         {/* Discord callout. The public faucet caps at 100 LGT per
             address per 24h; anyone needing bulk drips for chain
-            integration / load testing pings #faucet on Discord and
-            we route a larger transfer from the operator wallet. */}
+            integration / load testing runs the `/faucet` slash
+            command in our Discord, which the bot routes through the
+            operator wallet. */}
         <a
           href="https://discord.gg/ZWUeJ8k3eP"
           target="_blank"
@@ -128,10 +129,22 @@ export default async function FaucetPage() {
                 color: 'var(--color-bone)',
                 fontSize: 14,
                 lineHeight: 1.5,
-                maxWidth: 440,
+                maxWidth: 460,
               }}
             >
-              Ping us in #faucet on Discord and we&apos;ll route a larger drip for chain integration work.
+              Run the{' '}
+              <span
+                className="mono"
+                style={{
+                  color: 'var(--color-accent)',
+                  fontSize: 13,
+                  padding: '1px 6px',
+                  border: '1px solid var(--color-line-2)',
+                }}
+              >
+                /faucet
+              </span>{' '}
+              command in our Discord and the bot routes a larger drip for chain integration work.
             </div>
           </div>
           <span
