@@ -32,8 +32,6 @@ export function FrameCard({
     .join(' ')
   return (
     <div className={cls} style={{ padding, ...style }}>
-      <span className="fc-bl"></span>
-      <span className="fc-br"></span>
       {scrollX ? <div className="table-scroll">{children}</div> : children}
     </div>
   )

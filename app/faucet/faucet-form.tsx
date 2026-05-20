@@ -46,8 +46,6 @@ export function FaucetForm() {
         className="frame"
         style={{ marginTop: 48, padding: 32 }}
       >
-        <span className="fc-bl" />
-        <span className="fc-br" />
         <form onSubmit={onSubmit}>
           <div
             className="mono"
