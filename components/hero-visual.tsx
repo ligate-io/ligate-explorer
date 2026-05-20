@@ -20,8 +20,6 @@ export function HeroVisual({ size = 480 }: { size?: number }) {
         overflow: 'hidden',
       }}
     >
-      <span className="fc-bl" />
-      <span className="fc-br" />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/hero-graphic.png"

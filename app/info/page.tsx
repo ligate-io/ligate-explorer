@@ -254,8 +254,6 @@ export default async function InfoPage() {
                 position: 'relative',
               }}
             >
-              <span className="fc-bl" />
-              <span className="fc-br" />
               <div
                 className="mono"
                 style={{

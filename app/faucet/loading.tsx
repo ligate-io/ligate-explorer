@@ -5,10 +5,9 @@ import { Eyebrow } from '@/components/ui'
 // this route while the server component awaits `getInfo()`.
 //
 // Mirrors the silhouette of `app/faucet/page.tsx` + `faucet-form.tsx`
-// exactly — same centered 720px column, same eyebrow, the FrameCard
-// chrome (fc-bl/fc-br corners) on the form, same 3-column stats grid
-// below, same monospace footer block. When the real page swaps in,
-// nothing reflows.
+// exactly — same centered 720px column, same eyebrow, same `.frame`
+// border on the form, same 3-column stats grid below, same monospace
+// footer block. When the real page swaps in, nothing reflows.
 //
 // Was falling back to the root `app/loading.tsx` previously, which
 // drew a six-tile stats strip plus four dashboard rows on top of the
@@ -51,13 +50,10 @@ export default function Loading() {
           Drip 100 LGT into a devnet address. One drip per address every 24 hours. Funds are testnet-only and have no value.
         </p>
 
-        {/* Form silhouette. Matches FaucetForm's outer FrameCard
-            (.frame + fc-bl/fc-br corners, padding 32, marginTop 48):
-            recipient-address label + input row, then amount/button
-            row at the bottom. */}
+        {/* Form silhouette. Matches FaucetForm's outer .frame
+            (padding 32, marginTop 48): recipient-address label +
+            input row, then amount/button row at the bottom. */}
         <div className="frame" style={{ marginTop: 48, padding: 32 }}>
-          <span className="fc-bl" />
-          <span className="fc-br" />
           <div
             className="mono"
             style={{

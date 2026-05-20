@@ -159,46 +159,14 @@
   background: var(--color-accent);
 }
 
-/* Frame corners (L-brackets in sage) -------------------------------------- */
+/* Frame card. Was previously decorated with sage L-bracket corners
+   (pseudo-elements at the top, .fc-bl / .fc-br spans at the bottom);
+   stripped because the brackets read as visual noise. Plain 1px line
+   border is enough delimiter. */
 .frame {
   position: relative;
   border: 1px solid var(--color-line);
   background: var(--color-surface);
-}
-.frame::before,
-.frame::after,
-.frame > .fc-tl,
-.frame > .fc-tr,
-.frame > .fc-bl,
-.frame > .fc-br {
-  content: '';
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border-color: var(--color-accent);
-  border-style: solid;
-  pointer-events: none;
-  z-index: 2;
-}
-.frame::before {
-  top: -1px;
-  left: -1px;
-  border-width: 1px 0 0 1px;
-}
-.frame::after {
-  top: -1px;
-  right: -1px;
-  border-width: 1px 1px 0 0;
-}
-.frame > .fc-bl {
-  bottom: -1px;
-  left: -1px;
-  border-width: 0 0 1px 1px;
-}
-.frame > .fc-br {
-  bottom: -1px;
-  right: -1px;
-  border-width: 0 1px 1px 0;
 }
 .frame-bare {
   background: transparent;
