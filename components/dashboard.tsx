@@ -711,10 +711,50 @@ function formatTps(tps: number): string {
   return '<0.0001'
 }
 
+// Renders the Network KPI tile based on the live `network_status`
+// string set by the api adapter (or the RPC fallback path when api
+// is down). Three buckets, each with its own dot color:
+//   - "Synced"              → accent green
+//   - "API unreachable …"   → coral (api dead, RPC fallback active)
+//   - "Syncing (lag N)"     → amber
+// Pre-PR-#47 the tile was hardcoded to a green "SYNCED" pill that
+// ignored network_status entirely, which hid api outages from users.
+function NetworkStatusValue({ status }: { status: string }) {
+  const isUnreachable = status.toLowerCase().includes('unreachable')
+  const isSyncing = status.toLowerCase().includes('syncing')
+  const color = isUnreachable
+    ? 'var(--color-coral)'
+    : isSyncing
+      ? 'var(--color-amber)'
+      : 'var(--color-accent)'
+  const label = isUnreachable
+    ? 'API DOWN · RPC'
+    : isSyncing
+      ? status.toUpperCase()
+      : 'SYNCED'
+  return (
+    <span title={status}>
+      <span
+        style={{
+          display: 'inline-block',
+          width: 6,
+          height: 6,
+          borderRadius: 999,
+          background: color,
+          marginRight: 8,
+          verticalAlign: 'middle',
+          boxShadow: `0 0 6px ${color}`,
+        }}
+      />
+      {label}
+    </span>
+  )
+}
+
 export function StatsStrip({
   info,
 }: {
-  info: { chain_id: string; latest_block: number; tx_per_second: number; finality: string; supply_nano: string }
+  info: { chain_id: string; latest_block: number; tx_per_second: number; finality: string; supply_nano: string; network_status: string }
 }) {
   // "Latest block" tile lived here historically, but the BlockTickerCard
   // immediately below shows the same number bigger + with live timing
@@ -734,24 +774,14 @@ export function StatsStrip({
     { label: 'Block time', value: info.finality, mono: true },
     { label: 'LGT supply', value: fmtLgtCompact(info.supply_nano), mono: true },
     {
+      // Network status reads `info.network_status` (was hardcoded to
+      // "SYNCED" before, which silently lied during api outages).
+      // Three visual states keyed off the string:
+      //   - "Synced"            → accent green dot
+      //   - "API unreachable …" → coral dot (api down, RPC fallback)
+      //   - "Syncing (lag N)"   → amber dot
       label: 'Network',
-      value: (
-        <span>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 6,
-              height: 6,
-              borderRadius: 999,
-              background: 'var(--color-accent)',
-              marginRight: 8,
-              verticalAlign: 'middle',
-              boxShadow: '0 0 6px var(--color-accent)',
-            }}
-          />
-          SYNCED
-        </span>
-      ),
+      value: <NetworkStatusValue status={info.network_status} />,
       mono: true,
     },
   ]

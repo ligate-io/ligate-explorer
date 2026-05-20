@@ -573,7 +573,67 @@ function adaptDripResponse(r: ApiDripResponse): DripResult {
 // dev hits api.ligate.io same as prod; offline UI work is unsupported.
 // ---------------------------------------------------------------------------
 
+// Minimal slot wire shape returned by /v1/ledger/slots/latest on the
+// chain RPC (rpc.ligate.io). Sov-SDK ledger surface. Used only by
+// `getInfo()`'s RPC fallback path — never by the regular api flow.
+interface RpcSlotResponse {
+  type: 'slot'
+  number: number
+  hash: string
+  state_root: string
+  timestamp: number
+  finality_status?: string
+}
+
+/**
+ * Synthesise a ChainInfo from the chain RPC's latest slot when the
+ * api is unreachable. RPC is on different infra than the api (Caddy
+ * fronting the chain node, vs Railway hosting the api), so it usually
+ * stays up when the api dies. Fields the RPC can't tell us
+ * (chain_id, chain_hash, tps, supply, da_layer) fall back to env
+ * defaults or empty sentinels; the explorer's `ApiHealthBanner`
+ * renders the "api unreachable" warning so users know why some
+ * fields are blank.
+ *
+ * Returns null when RPC is ALSO unreachable — the page-level error
+ * boundary handles that case.
+ */
+async function getInfoFromRpcFallback(): Promise<ChainInfo | null> {
+  try {
+    const slot = await fetchChain<RpcSlotResponse>('/v1/ledger/slots/latest');
+    return {
+      chain_id: '',
+      chain_hash: '',
+      version: '',
+      latest_block: slot.number,
+      tx_per_second: 0,
+      finality: fallbackFinality,
+      block_time_ms: null,
+      rpc_url: rpcBase,
+      api_url: apiBase,
+      supply_nano: fallbackLgtSupplyNano,
+      network_status: 'API unreachable · RPC fallback',
+      da_layer: daLayer,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function getInfo(): Promise<ChainInfo> {
+  try {
+    return await getInfoFromApi();
+  } catch {
+    const fallback = await getInfoFromRpcFallback();
+    if (fallback) return fallback;
+    // Both api AND rpc are unreachable. Throw so the page-level error
+    // boundary catches it; better to show the error page than render
+    // a broken UI built from junk defaults.
+    throw new Error('Both api and rpc are unreachable');
+  }
+}
+
+async function getInfoFromApi(): Promise<ChainInfo> {
   // Five fetches in parallel:
   //   - /v1/info                 chain identity + indexer height
   //   - /v1/txs                  recent-tx sample for tps
@@ -797,8 +857,15 @@ export async function getAttestorSetAttestationsList(
 // already fit the widgets.
 // ---------------------------------------------------------------------------
 
-export async function getStatsTotals(): Promise<StatsTotals> {
-  return fetchJson<StatsTotals>("/v1/stats/totals", ttl(TTL.STATS_TOTALS));
+export async function getStatsTotals(): Promise<StatsTotals | null> {
+  // Most call sites already wrap in `.catch(() => null)`, but a few
+  // don't. Catching at the fetcher level so the page tree doesn't
+  // crash when the api is down and the call wasn't defensively wrapped.
+  try {
+    return await fetchJson<StatsTotals>("/v1/stats/totals", ttl(TTL.STATS_TOTALS));
+  } catch {
+    return null;
+  }
 }
 
 // /v1/stats/next-block-eta — drop-in for the BlockTickerCard live
@@ -859,22 +926,33 @@ export async function getTopHolders(n = 10): Promise<TopHolder[]> {
 }
 
 export async function getLatestBlocks(limit = 20): Promise<Block[]> {
-  const raw = await fetchJson<Page<ApiBlockResponse>>(
-    `/v1/blocks?limit=${limit}`,
-    ttl(TTL.BLOCKS_LIST),
-  );
-  return raw.data.map(adaptBlockResponse);
+  try {
+    const raw = await fetchJson<Page<ApiBlockResponse>>(
+      `/v1/blocks?limit=${limit}`,
+      ttl(TTL.BLOCKS_LIST),
+    );
+    return raw.data.map(adaptBlockResponse);
+  } catch {
+    // API unreachable. Return empty so the calling page renders an
+    // empty state instead of crashing; the global ApiHealthBanner
+    // (see components/api-health-banner.tsx) tells the user why.
+    return [];
+  }
 }
 
 export async function getAllBlocks(): Promise<Block[]> {
   // Snapshot of the most-recent 100 blocks, used for header stats
   // (avg-tx / fees / max height) on `/blocks` and `/`. Paginated
   // drill-down is `getBlocksPage`.
-  const raw = await fetchJson<Page<ApiBlockResponse>>(
-    "/v1/blocks?limit=100",
-    ttl(TTL.BLOCKS_LIST),
-  );
-  return raw.data.map(adaptBlockResponse);
+  try {
+    const raw = await fetchJson<Page<ApiBlockResponse>>(
+      "/v1/blocks?limit=100",
+      ttl(TTL.BLOCKS_LIST),
+    );
+    return raw.data.map(adaptBlockResponse);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -888,14 +966,18 @@ export async function getBlocksPage(
 ): Promise<PageResult<Block>> {
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
-  const raw = await fetchJson<Page<ApiBlockResponse>>(
-    `/v1/blocks?${qs}`,
-    ttl(TTL.BLOCKS_LIST),
-  );
-  return {
-    items: raw.data.map(adaptBlockResponse),
-    nextCursor: raw.pagination.next,
-  };
+  try {
+    const raw = await fetchJson<Page<ApiBlockResponse>>(
+      `/v1/blocks?${qs}`,
+      ttl(TTL.BLOCKS_LIST),
+    );
+    return {
+      items: raw.data.map(adaptBlockResponse),
+      nextCursor: raw.pagination.next,
+    };
+  } catch {
+    return { items: [], nextCursor: null };
+  }
 }
 
 export async function getBlock(height: number): Promise<Block | null> {
@@ -911,19 +993,27 @@ export async function getBlock(height: number): Promise<Block | null> {
 }
 
 export async function getLatestTxs(limit = 20): Promise<Tx[]> {
-  const raw = await fetchJson<Page<ApiTxResponse>>(
-    `/v1/txs?limit=${limit}`,
-    ttl(TTL.TXS_LIST),
-  );
-  return raw.data.map(adaptTxResponse);
+  try {
+    const raw = await fetchJson<Page<ApiTxResponse>>(
+      `/v1/txs?limit=${limit}`,
+      ttl(TTL.TXS_LIST),
+    );
+    return raw.data.map(adaptTxResponse);
+  } catch {
+    return [];
+  }
 }
 
 export async function getAllTxs(): Promise<Tx[]> {
-  const raw = await fetchJson<Page<ApiTxResponse>>(
-    "/v1/txs?limit=100",
-    ttl(TTL.TXS_LIST),
-  );
-  return raw.data.map(adaptTxResponse);
+  try {
+    const raw = await fetchJson<Page<ApiTxResponse>>(
+      "/v1/txs?limit=100",
+      ttl(TTL.TXS_LIST),
+    );
+    return raw.data.map(adaptTxResponse);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -939,11 +1029,15 @@ export async function getTxsPage(
   const qs = new URLSearchParams({ limit: String(limit) });
   if (cursor) qs.set("before", cursor);
   if (kind) qs.set("kind", kind);
-  const raw = await fetchJson<Page<ApiTxResponse>>(`/v1/txs?${qs}`, ttl(TTL.TXS_LIST));
-  return {
-    items: raw.data.map(adaptTxResponse),
-    nextCursor: raw.pagination.next,
-  };
+  try {
+    const raw = await fetchJson<Page<ApiTxResponse>>(`/v1/txs?${qs}`, ttl(TTL.TXS_LIST));
+    return {
+      items: raw.data.map(adaptTxResponse),
+      nextCursor: raw.pagination.next,
+    };
+  } catch {
+    return { items: [], nextCursor: null };
+  }
 }
 
 export async function getTx(hash: string): Promise<Tx | null> {
@@ -960,11 +1054,15 @@ export async function getTxsForBlock(height: number): Promise<Tx[]> {
   // 100-row scan + client-side filter, which silently missed a
   // block's txs when the block was older than the most recent 100
   // chain-wide txs. Now exact: api returns only this block's rows.
-  const raw = await fetchJson<Page<ApiTxResponse>>(
-    `/v1/txs?block_height=${height}&limit=100`,
-    ttl(TTL.TXS_FOR_BLOCK),
-  );
-  return raw.data.map(adaptTxResponse);
+  try {
+    const raw = await fetchJson<Page<ApiTxResponse>>(
+      `/v1/txs?block_height=${height}&limit=100`,
+      ttl(TTL.TXS_FOR_BLOCK),
+    );
+    return raw.data.map(adaptTxResponse);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -1005,11 +1103,15 @@ function adaptSchemaResponse(
 // home page's schemas card polls directly from the browser via
 // `fetchSchemasFromBrowser`.
 export async function getSchemas(): Promise<Schema[]> {
-  const raw = await fetchJson<Page<ApiSchemaResponse>>(
-    "/v1/schemas?limit=100",
-    ttl(TTL.SCHEMAS_LIST),
-  );
-  return raw.data.map((s) => adaptSchemaResponse(s));
+  try {
+    const raw = await fetchJson<Page<ApiSchemaResponse>>(
+      "/v1/schemas?limit=100",
+      ttl(TTL.SCHEMAS_LIST),
+    );
+    return raw.data.map((s) => adaptSchemaResponse(s));
+  } catch {
+    return [];
+  }
 }
 
 // Schemas bound to a specific attestor set. Uses the
@@ -1089,11 +1191,28 @@ export async function getAttestorSet(
 }
 
 export async function getAddress(addr: string): Promise<AddressDetail> {
-  const raw = await fetchJson<ApiAddressSummaryResponse>(
-    `/v1/addresses/${addr}`,
-    ttl(TTL.ADDRESS_SUMMARY),
-  );
-  return adaptAddressSummary(raw);
+  try {
+    const raw = await fetchJson<ApiAddressSummaryResponse>(
+      `/v1/addresses/${addr}`,
+      ttl(TTL.ADDRESS_SUMMARY),
+    );
+    return adaptAddressSummary(raw);
+  } catch {
+    // Synthesize an empty detail so /address/[addr] still renders
+    // chrome + "no activity yet" empty state when api is down.
+    return {
+      address: addr,
+      balance_nano: "0",
+      tx_count: 0,
+      first_seen_height: 0,
+      first_seen_at: "",
+      role: null,
+      sequencer_bond: null,
+      attester_bond: null,
+      prover_bond: null,
+      recent_txs: [],
+    };
+  }
 }
 
 // Paginated address tx history (ligate-api PR #52). Same envelope +
