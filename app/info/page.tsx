@@ -284,8 +284,12 @@ export default async function InfoPage() {
 
       <div style={{ marginTop: 64 }}>
         <Eyebrow>Resources</Eyebrow>
+        {/* 3-col so the 6 entries (4 external + 2 internal companion
+            routes) lay out as a balanced 2×3 grid instead of 4+2
+            with two phantom empty slots on the right of the second
+            row. */}
         <div
-          className="grid-stats-4"
+          className="grid-stats-3"
           style={{ marginTop: 16, gap: 0 }}
         >
           {[
@@ -309,6 +313,18 @@ export default async function InfoPage() {
               url: i.rpc_url,
               meta: 'cors-enabled, rate-limited',
             },
+            // Internal companion routes — surfaced here so the
+            // navbar doesn't have to grow past 9 tabs.
+            {
+              label: 'Chain stats',
+              url: '/stats',
+              meta: 'tx + attestation + block-time charts',
+            },
+            {
+              label: 'Genesis',
+              url: '/genesis',
+              meta: 'where the chain began',
+            },
           ].map((r, idx) => (
             <a
               key={idx}
@@ -316,10 +332,19 @@ export default async function InfoPage() {
               className="frame"
               style={{
                 padding: 20,
-                borderRight: idx === 3 ? '1px solid var(--color-line)' : 0,
+                // 3-col grid: right border on the rightmost cell of
+                // each row (idx 2 and idx 5) so each row reads as a
+                // closed strip. Internal links (idx >= 4) don't open
+                // in a new tab; externals get target=_blank.
+                borderRight:
+                  idx % 3 === 2 ? '1px solid var(--color-line)' : 0,
+                borderBottom: idx < 3 ? 0 : '1px solid var(--color-line)',
                 cursor: 'pointer',
                 position: 'relative',
               }}
+              {...(r.url.startsWith('http')
+                ? { target: '_blank', rel: 'noopener noreferrer' }
+                : {})}
             >
               <div
                 className="mono"
