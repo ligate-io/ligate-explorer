@@ -50,6 +50,28 @@ export const metadata: Metadata = {
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
   },
   manifest: '/site.webmanifest',
+  // Open Graph + Twitter cards. Next auto-resolves the image URLs
+  // from `app/opengraph-image.tsx` (1200x630 dynamic generator that
+  // pulls live chain head); explicit `images: ['/opengraph-image']`
+  // would also work but the file-based convention is what Next does
+  // by default — keeping these blocks for the rest of the metadata
+  // (url, siteName, locale, twitter card type, etc.).
+  openGraph: {
+    type: 'website',
+    url: 'https://explorer.ligate.io',
+    siteName: 'Ligate Explorer',
+    title: 'Ligate Explorer',
+    description:
+      'Block, transaction, schema, attestor set, and attestation explorer for Ligate Chain devnet.',
+    locale: 'en_US',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Ligate Explorer',
+    description:
+      'Block, transaction, schema, attestor set, and attestation explorer for Ligate Chain devnet.',
+    creator: '@ligatelabs',
+  },
 }
 
 export default function RootLayout({
