@@ -7,7 +7,6 @@ import type {
   AttestorSetItem,
   Block,
   ChainInfo,
-  ClusterTopology,
   DripResult,
   DripStatus,
   FinalityStats,
@@ -59,7 +58,6 @@ const fallbackLgtSupplyNano =
 // `components/live-cards.tsx`) so the SSR cache TTLs only apply on
 // hard navigation now.
 const TTL = {
-  CLUSTER: 5,
   INFO: 5,
   STATS_TOTALS: 10,
   STATS_FINALITY: 30,
@@ -697,23 +695,6 @@ async function getInfoFromApi(): Promise<ChainInfo> {
 export async function getFinalityStats(): Promise<FinalityStats | null> {
   try {
     return await fetchJson<FinalityStats>("/v1/stats/finality", ttl(TTL.STATS_FINALITY));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Fetch the live DbElected cluster topology from the api proxy (which
- * fronts the chain's `/v1/cluster/nodes`, stripping VPC addresses + adding
- * a `cluster_health` summary). Returns `null` only if the api itself is
- * unreachable; partial / degraded clusters surface as `cluster_health:
- * 'unknown' | 'degraded' | 'leaderless'` and the caller renders them.
- *
- * Cache matches the api's own TTL so we don't waste a server-side hop.
- */
-export async function getClusterTopology(): Promise<ClusterTopology | null> {
-  try {
-    return await fetchJson<ClusterTopology>("/v1/cluster/nodes", ttl(TTL.CLUSTER));
   } catch {
     return null;
   }
