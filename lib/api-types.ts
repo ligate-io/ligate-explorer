@@ -148,6 +148,27 @@ export interface ChainInfo {
   da_layer: string
 }
 
+// /v1/cluster/nodes (chain#442). Mirrors the api's public
+// `ClusterTopology` shape; addresses are stripped at the api layer
+// before they reach the explorer, so this carries no per-node
+// `address` field.
+
+export type ClusterHealth = 'healthy' | 'degraded' | 'leaderless' | 'unknown'
+
+export interface ClusterNode {
+  node_id: string
+  is_leader: boolean
+  last_heartbeat_age_ms: number
+}
+
+export interface ClusterTopology {
+  nodes: ClusterNode[]
+  leader_node_id: string | null
+  leader_acquired_at_epoch_ms: number | null
+  generated_at_epoch_ms: number
+  cluster_health: ClusterHealth
+}
+
 export interface AddressDetail {
   address: string
   balance_nano: string
