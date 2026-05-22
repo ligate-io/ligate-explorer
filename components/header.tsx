@@ -14,6 +14,7 @@ const TABS = [
   { id: 'attestations', label: 'Attestations', href: '/attestations' },
   { id: 'schemas', label: 'Schemas', href: '/schemas' },
   { id: 'holders', label: 'Holders', href: '/holders' },
+  { id: 'sequencer', label: 'Sequencer', href: '/sequencer' },
   { id: 'faucet', label: 'Faucet', href: '/faucet' },
   { id: 'info', label: 'Info', href: '/info' },
 ]
@@ -37,6 +38,7 @@ function activeTab(pathname: string): string | null {
   // the list summarises.
   if (pathname.startsWith('/holders') || pathname.startsWith('/address/'))
     return 'holders'
+  if (pathname.startsWith('/sequencer')) return 'sequencer'
   if (pathname.startsWith('/faucet')) return 'faucet'
   if (pathname.startsWith('/info')) return 'info'
   return null

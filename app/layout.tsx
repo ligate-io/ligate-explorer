@@ -24,6 +24,7 @@ import '@fontsource/jetbrains-mono/600.css'
 import './globals.css'
 
 import { ApiHealthBanner } from '@/components/api-health-banner'
+import { IndexerBanner } from '@/components/indexer-banner'
 import { Footer } from '@/components/footer'
 import { Header } from '@/components/header'
 
@@ -89,11 +90,13 @@ export default function RootLayout({
           flexDirection: 'column',
         }}
       >
-        {/* Sticky amber bar that appears when /v1/info has failed
-            2+ consecutive polls (api dead, Railway outage, etc.).
-            Renders nothing while healthy. Mounted above <Header />
-            so it sits at the very top of the viewport. */}
+        {/* Operational banners. Both render nothing in the healthy
+            case and never render together — `ApiHealthBanner` covers
+            api-unreachable (5xx / network), `IndexerBanner` covers
+            api-alive-but-indexer-behind (head_lag_slots > threshold).
+            Sit above <Header /> so they pin to the top of the viewport. */}
         <ApiHealthBanner />
+        <IndexerBanner />
         <Header />
         <main
           className="page-anim"
