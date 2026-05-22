@@ -3,7 +3,9 @@
 import { useRouter } from 'next/navigation'
 import { ago, fmtLgt, fmtLgtTrim, trunc } from '@/lib/format'
 import type { Block, Tx, TxStatus } from '@/lib/api-types'
+import type { AddressLabelMap } from '@/lib/address-labels'
 import { readTransfer } from '@/lib/tx-payload'
+import { AddressBadge } from './address-badge'
 import { ArrowRight } from './svgs'
 import { StatusPill, TypeTag } from './ui'
 
@@ -229,6 +231,7 @@ export function TxsTable({
   rows,
   showBlock = true,
   compact = false,
+  labels,
 }: {
   rows: Tx[]
   showBlock?: boolean
@@ -240,6 +243,12 @@ export function TxsTable({
    *  same per-row height as the latest-blocks card. Detail / list
    *  pages stay in full mode. */
   compact?: boolean
+  /** Optional address → label map (treasury / faucet / etc.). When
+   *  supplied, the sender cell renders a small badge next to the
+   *  truncated address. Built per-request by `buildAddressLabels()`
+   *  in lib/address-labels.ts. Compact mode (homepage card) skips
+   *  the badge to keep row height stable. */
+  labels?: AddressLabelMap
 }) {
   const router = useRouter()
   // See BlocksTable: callers wrap us in `<FrameCard scrollX>` to opt
@@ -297,6 +306,10 @@ export function TxsTable({
               >
                 {trunc(t.sender, 6, 4)}
               </span>
+              {/* Skip the badge in compact mode (homepage card) to keep
+                  row heights aligned with BlocksTable. Detail / list
+                  pages get the badge. */}
+              {!compact ? <AddressBadge addr={t.sender} labels={labels} /> : null}
             </td>
             <td>
               {compact ? (

@@ -828,6 +828,16 @@ html, body {
   }
 }
 
+/* About-card 3-column → 1-column collapse below ~720px so the
+   paragraphs stay readable. Threshold matches the body-text max-width
+   at which 3 columns become too narrow (~200px per column). */
+@media (max-width: 720px) {
+  .about-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+}
+
 /* ---- Hamburger menu (mobile nav) --------------------------------------- */
 
 /* Default: hidden on desktop. Shown only ≤1024px alongside hiding the

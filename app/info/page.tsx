@@ -88,6 +88,73 @@ export default async function InfoPage() {
         Sovereign SDK rollup on Celestia. Built to record attestations cheaply and verifiably, not to move value. Devnet runs without slashing.
       </p>
 
+      {/* About card. Orientation block for first-time visitors: what
+          this chain is, who runs it, what the path to mainnet looks
+          like, plus the two canonical reading links (docs + whitepaper).
+          Sits before the stats grid so the human framing comes before
+          the numbers. */}
+      <div style={{ marginTop: 40 }}>
+        <Eyebrow>About this chain</Eyebrow>
+        <FrameCard padding={28} style={{ marginTop: 14 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+              gap: 28,
+              marginBottom: 24,
+            }}
+            className="about-grid"
+          >
+            <AboutCell
+              label="Built by"
+              body="Ligate Labs. Pre-launch crypto lab focused on the receipt layer for AI. Three first-party flagships (Themisra, Mneme, Iris) ship on the same protocol."
+            />
+            <AboutCell
+              label="What it's for"
+              body="Cheap, verifiable attestations: schemas register the shape, attestor sets sign the threshold, the chain notarises the proof. Payloads stay off-chain."
+            />
+            <AboutCell
+              label="Where it's going"
+              body="Devnet → testnet → mainnet Q2 2026. Devnet has no slashing, no leader rotation, single-sequencer. Testnet adds bonds + multi-sequencer."
+            />
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              flexWrap: 'wrap',
+              paddingTop: 20,
+              borderTop: '1px solid var(--color-line)',
+            }}
+          >
+            <a
+              href="https://docs.ligate.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn"
+            >
+              Docs ↗
+            </a>
+            <a
+              href="https://ligate.io/whitepaper"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn"
+            >
+              Whitepaper ↗
+            </a>
+            <a
+              href="https://github.com/ligate-io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn"
+            >
+              GitHub ↗
+            </a>
+          </div>
+        </FrameCard>
+      </div>
+
       <div
         className="grid-stats-3"
         style={{ marginTop: 56, gap: 0 }}
@@ -295,6 +362,37 @@ export default async function InfoPage() {
 }
 
 // Full p50 / p95 / p99 + sample count + source breakdown. Renders
+// Small label + body cell for the "About this chain" card. Keeps the
+// three columns visually consistent: same eyebrow weight, same body
+// size, same color hierarchy as the rest of the page.
+function AboutCell({ label, body }: { label: string; body: string }) {
+  return (
+    <div>
+      <div
+        className="mono"
+        style={{
+          fontSize: 10,
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: 'var(--color-subtle)',
+          marginBottom: 10,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          color: 'var(--color-bone)',
+          fontSize: 14,
+          lineHeight: 1.55,
+        }}
+      >
+        {body}
+      </div>
+    </div>
+  )
+}
+
 // only when /v1/stats/finality returned data. The "low-confidence"
 // hint sits below the row when sampled_count < 100, even when
 // source==='observed' — we have a measurement, just not many.

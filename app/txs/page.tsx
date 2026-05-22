@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { getAllTxs, getTxsPage } from '@/lib/api'
+import { getAllTxs, getStatsTotals, getTxsPage } from '@/lib/api'
+import { buildAddressLabels } from '@/lib/address-labels'
 import type { Tx, TxStatus, TxType } from '@/lib/api-types'
 import { TxsTable } from '@/components/tables'
 import { Eyebrow, FrameCard } from '@/components/ui'
@@ -88,11 +89,18 @@ export default async function TxsPage({
   const targetStatus = STATUS_MAP[statusFilter]
 
   // 100-tx snapshot for header stats + filter counts. Paged drill-down
-  // table is its own cursor-aware fetch.
-  const [all, pageResult] = await Promise.all([
+  // table is its own cursor-aware fetch. `totals` powers the address
+  // label map (treasury / faucet badges next to sender addresses);
+  // it's catch-to-null so a totals 5xx doesn't take the whole list
+  // down — labels just degrade to no-badge.
+  const [all, pageResult, totals] = await Promise.all([
     getAllTxs(),
     getTxsPage(cursor, PER_PAGE, pascalToWireKind(filter)),
+    getStatsTotals().catch(() => null),
   ])
+  const labels = buildAddressLabels({
+    treasuryAddress: totals?.treasury_address,
+  })
   // Server filters on `?kind=` now (ligate-api PR #43). Unknown kinds
   // come back as zero rows rather than 400. The api does NOT filter on
   // outcome / status though (the `outcome=…` param is silently ignored),
@@ -350,7 +358,7 @@ export default async function TxsPage({
             </span>
           </div>
         ) : (
-          <TxsTable rows={rows} />
+          <TxsTable rows={rows} labels={labels} />
         )}
       </FrameCard>
 

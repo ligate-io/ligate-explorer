@@ -180,7 +180,7 @@ export function LiveAttestationsCard({
 }) {
   const [items, setItems] = useState<AttestationItem[]>(initial)
   useLivePoll(async () => {
-    const fresh = await fetchAttestationsFromBrowser(5)
+    const fresh = await fetchAttestationsFromBrowser(6)
     if (fresh) setItems(fresh)
   }, POLL_MS)
   return (

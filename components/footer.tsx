@@ -1,4 +1,21 @@
-// Footer with mono attribution + minimal nav. Server-safe.
+// Footer with mono attribution + nav. Server-safe.
+//
+// Link surface mirrors the marketing site footer (docs / GitHub /
+// X / Discord / status) so visitors moving between explorer and
+// landing don't lose their bearings. Order: by likelihood-to-click —
+// docs first (most-asked-for), social last.
+
+const LINKS: { label: string; href: string; external?: boolean }[] = [
+  { label: 'docs.ligate.io', href: 'https://docs.ligate.io', external: true },
+  {
+    label: 'github / ligate-io',
+    href: 'https://github.com/ligate-io',
+    external: true,
+  },
+  { label: 'discord', href: 'https://discord.gg/ZWUeJ8k3eP', external: true },
+  { label: 'x / @ligatelabs', href: 'https://x.com/ligatelabs', external: true },
+  { label: 'status', href: 'https://status.ligate.io', external: true },
+]
 
 export function Footer() {
   return (
@@ -21,16 +38,21 @@ export function Footer() {
         }}
       >
         <div className="col">© 2026 Ligate Labs · devnet build</div>
-        <div className="col" style={{ display: 'flex', gap: 24 }}>
-          <a href="https://docs.ligate.io" className="a">
-            docs.ligate.io
-          </a>
-          <a href="https://github.com/ligate-io" className="a">
-            github / ligate-io
-          </a>
-          <a href="https://status.ligate.io" className="a">
-            status
-          </a>
+        <div
+          className="col"
+          style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}
+        >
+          {LINKS.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              className="a"
+              target={l.external ? '_blank' : undefined}
+              rel={l.external ? 'noopener noreferrer' : undefined}
+            >
+              {l.label}
+            </a>
+          ))}
         </div>
         <div className="col" style={{ color: 'var(--color-subtle)' }}>
           ligate-devnet-1
