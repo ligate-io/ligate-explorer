@@ -13,6 +13,7 @@ const TABS = [
   { id: 'txs', label: 'Txs', href: '/txs' },
   { id: 'attestations', label: 'Attestations', href: '/attestations' },
   { id: 'schemas', label: 'Schemas', href: '/schemas' },
+  { id: 'holders', label: 'Holders', href: '/holders' },
   { id: 'faucet', label: 'Faucet', href: '/faucet' },
   { id: 'cluster', label: 'Cluster', href: '/cluster' },
   { id: 'info', label: 'Info', href: '/info' },
@@ -31,6 +32,12 @@ function activeTab(pathname: string): string | null {
     return 'attestations'
   if (pathname.startsWith('/schemas') || pathname.startsWith('/schema/'))
     return 'schemas'
+  // `/address/[addr]` lights up the Holders tab too — the addresses
+  // page is most often reached by drilling into a holders row, and the
+  // detail page is a per-address surface of the same value distribution
+  // the list summarises.
+  if (pathname.startsWith('/holders') || pathname.startsWith('/address/'))
+    return 'holders'
   if (pathname.startsWith('/faucet')) return 'faucet'
   if (pathname.startsWith('/cluster')) return 'cluster'
   if (pathname.startsWith('/info')) return 'info'
@@ -126,6 +133,7 @@ function SearchBar() {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Clear the input whenever the path changes — that's what users
   // expect from explorer search bars (Etherscan / Beaconcha.in /
@@ -135,6 +143,34 @@ function SearchBar() {
     setVal('')
     setErr('')
   }, [pathname])
+
+  // Global `/` keypress → focus search. Same pattern Etherscan /
+  // GitHub / Linear use. Skip when the user is already typing into
+  // a text field, contenteditable, or holds a modifier (otherwise
+  // shortcuts like Cmd+/ would steal focus from any input on the
+  // page). preventDefault so the literal "/" doesn't get inserted
+  // into the search input on focus.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      const editable = target?.isContentEditable
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        editable
+      ) {
+        return
+      }
+      e.preventDefault()
+      inputRef.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // Outside-click: clear the input when the user clicks anywhere
   // outside the search form. Listens at the document level on
@@ -216,8 +252,9 @@ function SearchBar() {
       <div className="search-wrap" data-busy={busy ? 'true' : undefined}>
         <SearchIcon />
         <input
+          ref={inputRef}
           type="search"
-          placeholder="Hash, address, or block height"
+          placeholder="Hash, address, or block height  (press / to focus)"
           value={val}
           onChange={(e) => {
             setVal(e.target.value)
