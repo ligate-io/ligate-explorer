@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { getAddress, getAddressTxs } from '@/lib/api'
+import { getAddress, getAddressTxs, getStatsTotals } from '@/lib/api'
+import { buildAddressLabels } from '@/lib/address-labels'
 import { fmtLgt, trunc } from '@/lib/format'
+import { AddressBadge } from '@/components/address-badge'
 import { CopyButton } from '@/components/copy-button'
 import { TxsTable } from '@/components/tables'
 import { Eyebrow, FrameCard } from '@/components/ui'
@@ -28,11 +30,19 @@ export default async function AddressPage({
   // an empty "Recent transactions" placeholder. Now: real history,
   // server-paginated, same envelope as /v1/txs so the existing
   // TxsTable adapter just works.
-  const [a, txsPage] = await Promise.all([
+  const [a, txsPage, totals] = await Promise.all([
     getAddress(addr),
     getAddressTxs(addr, undefined, 20),
+    getStatsTotals().catch(() => null),
   ])
   const recentTxs = txsPage.items
+  // Address label map — surfaces "TREASURY · FAUCET" badge next to
+  // the treasury wallet in the recent-txs table. Catch-to-null on
+  // totals so a transient stats failure doesn't break the page,
+  // just suppresses badges.
+  const labels = buildAddressLabels({
+    treasuryAddress: totals?.treasury_address,
+  })
   const role = a.role
   const balanceParts = fmtLgt(a.balance_nano).split('.')
 
@@ -73,6 +83,7 @@ export default async function AddressPage({
           {addr}
         </div>
         <CopyButton value={addr} />
+        <AddressBadge addr={addr} labels={labels} />
         {role ? (
           <span
             className="role-chip"
@@ -231,7 +242,7 @@ export default async function AddressPage({
               </span>
             </div>
           ) : (
-            <TxsTable rows={recentTxs} />
+            <TxsTable rows={recentTxs} labels={labels} />
           )}
         </FrameCard>
       </div>
