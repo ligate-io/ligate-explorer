@@ -232,7 +232,7 @@ async function Row2() {
 async function Row3() {
   const [schemas, attestationsPage] = await Promise.all([
     getSchemas(),
-    getAttestationItems(undefined, 5),
+    getAttestationItems(undefined, 6),
   ])
   return (
     <section

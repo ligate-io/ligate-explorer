@@ -393,7 +393,21 @@ export function DailyAttestationsCard({
     return r < 0.25 ? 1 : r < 0.6 ? 2 : 3
   }
   return (
-    <FrameCard padding={22}>
+    // Flex column with `height: 100%` so the FrameCard fills the grid
+    // cell stretch (default `align-items: stretch` on `.grid-3`). The
+    // heatmap wrapper then claims the leftover vertical space between
+    // the header + legend via `flex: 1`, and the grid's
+    // `gridAutoRows: 1fr` spreads cells equally — net effect is the
+    // card naturally matches the height of taller siblings (e.g.
+    // AttestorSetsCard with 5 rows) instead of looking visually short.
+    <FrameCard
+      padding={22}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+      }}
+    >
       <div
         style={{
           display: 'flex',
@@ -418,16 +432,20 @@ export function DailyAttestationsCard({
           <span style={{ color: 'var(--color-subtle)' }}>last {days}d</span>
         </span>
       </div>
-      {/* 5 × 6 grid (30 cells). Each cell is one day, sized small so
-          the whole heatmap is compact. Hover title carries the date
-          + count — no in-cell label needed, the colour tells the
-          intensity story on its own. Reading order top-left →
-          bottom-right is chronological (oldest first, today last). */}
+      {/* 5 × 6 grid (30 cells). Each cell is one day. Rows are sized
+          via `grid-auto-rows: 1fr` so they spread to fill the
+          available vertical space — when the parent flex column is
+          tall (e.g. AttestorSets with 5 rows next to us), the cells
+          grow proportionally. `minHeight` keeps a floor for the case
+          where the parent column has nothing forcing it taller. */}
       <div
         style={{
+          flex: 1,
           display: 'grid',
           gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+          gridAutoRows: '1fr',
           gap: 3,
+          minHeight: 102,
         }}
       >
         {cells.map((c) => (
@@ -435,9 +453,9 @@ export function DailyAttestationsCard({
             key={c.date}
             title={`${c.date} · ${c.count} ${c.count === 1 ? 'attestation' : 'attestations'}`}
             style={{
-              height: 18,
               background: CELL_PALETTE[bucket(c.count)],
               cursor: 'default',
+              minHeight: 18,
             }}
           />
         ))}
