@@ -29,9 +29,10 @@ import {
   fetchSchemasFromBrowser,
   fetchStripInfoFromBrowser,
 } from '@/lib/api-browser'
-import { trunc } from '@/lib/format'
+import { ago, isoDate, trunc } from '@/lib/format'
 import { useLivePoll } from '@/lib/use-live-poll'
 import { StatsStrip } from './dashboard'
+import { ArrowRight } from './svgs'
 import { BlocksTable, TxsTable } from './tables'
 import { Eyebrow, FrameCard } from './ui'
 
@@ -442,6 +443,244 @@ export function LiveBlocksTopStats({
         label="Indexed blocks"
         value={state.indexedBlocks.toLocaleString()}
       />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Sequencer page surface — 3-stat strip (slots produced / block time
+// / latest slot) + 10-row recent-slots table. Polls /v1/info +
+// /v1/blocks in parallel every 6s so the single-sequencer page advances
+// without a manual reload (same UX promise the home + blocks pages
+// already make).
+//
+// `blockTime` is passed in as the SSR seed and kept static client-side:
+// the measured slot interval drifts slowly enough that re-fetching it
+// every 6s isn't worth it; users care most about new-slot arrival,
+// which is what the height + table cover.
+// ---------------------------------------------------------------------
+
+export function LiveSequencerSurface({
+  initial,
+}: {
+  initial: {
+    chainHead: number
+    blockTime: string
+    blocks: Block[]
+  }
+}) {
+  const [chainHead, setChainHead] = useState<number>(initial.chainHead)
+  const [blocks, setBlocks] = useState<Block[]>(initial.blocks)
+
+  useLivePoll(async () => {
+    // Two endpoints in parallel — Promise.all so the next tick is the
+    // worst case of either, not the sum. Both calls already retry
+    // internally (fetchOk) so we don't bother wrapping in extra catches.
+    const [info, fresh] = await Promise.all([
+      fetchInfoFromBrowser(),
+      fetchLatestBlocksFromBrowser(10),
+    ])
+    if (info?.info.indexer_height != null) {
+      setChainHead(info.info.indexer_height)
+    }
+    if (fresh) setBlocks(fresh)
+  }, POLL_MS)
+
+  const latestSlot = blocks[0]
+  const latestSlotAge =
+    latestSlot != null
+      ? ago(Math.floor((Date.now() - latestSlot.timestamp) / 1000))
+      : '—'
+  const stats: { label: string; value: string; sub: string }[] = [
+    {
+      label: 'Slots produced',
+      value: '#' + chainHead.toLocaleString(),
+      sub: 'all-time on devnet-1',
+    },
+    {
+      label: 'Block time',
+      value: initial.blockTime,
+      sub: 'measured slot interval',
+    },
+    {
+      label: 'Latest slot',
+      value: latestSlot ? '#' + latestSlot.height.toLocaleString() : '—',
+      sub: latestSlot ? latestSlotAge : 'no slots indexed yet',
+    },
+  ]
+
+  return (
+    <>
+      <div
+        className="grid-stats-3"
+        style={{ marginTop: 40, gap: 0 }}
+      >
+        {stats.map((t, i) => (
+          <FrameCard
+            key={i}
+            padding={20}
+            style={{
+              borderRight: i === 2 ? '1px solid var(--color-line)' : 0,
+            }}
+          >
+            <div
+              className="mono"
+              style={{
+                fontSize: 10,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                color: 'var(--color-subtle)',
+                marginBottom: 10,
+              }}
+            >
+              {t.label}
+            </div>
+            <div
+              className="serif"
+              style={{
+                fontSize: 36,
+                lineHeight: 1,
+                color: 'var(--color-ink)',
+              }}
+            >
+              {t.value}
+            </div>
+            <div
+              className="mono"
+              style={{
+                marginTop: 10,
+                fontSize: 9,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                color: 'var(--color-subtle)',
+              }}
+            >
+              {t.sub}
+            </div>
+          </FrameCard>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 56 }}>
+        <Eyebrow>Recent slots produced</Eyebrow>
+        <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
+          <table className="tbl tab-num">
+            <thead>
+              <tr>
+                <th>Slot</th>
+                <th>Hash</th>
+                <th>Txs</th>
+                <th>Finality</th>
+                <th>Time</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {blocks.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    style={{
+                      padding: '48px 22px',
+                      textAlign: 'center',
+                      color: 'var(--color-subtle)',
+                    }}
+                  >
+                    <span
+                      className="mono"
+                      style={{ fontSize: 11, letterSpacing: '0.18em' }}
+                    >
+                      No slots indexed yet
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                blocks.slice(0, 10).map((b) => {
+                  const finalized = b.finality_status === 'finalized'
+                  const pending = b.finality_status === 'pending'
+                  const finalityLabel = finalized
+                    ? 'finalized'
+                    : pending
+                      ? 'pending DA'
+                      : '—'
+                  const finalityColor = finalized
+                    ? 'var(--color-accent)'
+                    : pending
+                      ? 'var(--color-amber)'
+                      : 'var(--color-subtle)'
+                  return (
+                    <tr key={b.height}>
+                      <td>
+                        <Link
+                          href={`/blocks/${b.height}`}
+                          className="mono link"
+                          style={{ color: 'var(--color-ink)' }}
+                        >
+                          #{b.height}
+                        </Link>
+                      </td>
+                      <td>
+                        <span className="h-mono" title={b.hash}>
+                          {trunc(b.hash, 10, 6)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="mono">{b.tx_count}</span>
+                      </td>
+                      <td>
+                        <span
+                          className="mono"
+                          style={{
+                            fontSize: 10,
+                            letterSpacing: '0.18em',
+                            textTransform: 'uppercase',
+                            color: finalityColor,
+                          }}
+                        >
+                          {finalityLabel}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className="mono"
+                          style={{ color: 'var(--color-muted)' }}
+                          title={isoDate(b.timestamp)}
+                        >
+                          {ago(Math.floor((Date.now() - b.timestamp) / 1000))}
+                        </span>
+                      </td>
+                      <td style={{ width: 24, textAlign: 'right' }}>
+                        <span className="row-arrow">
+                          <ArrowRight />
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </FrameCard>
+        <div
+          style={{
+            marginTop: 12,
+            display: 'flex',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <Link
+            href="/blocks"
+            className="mono link"
+            style={{
+              fontSize: 11,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+            }}
+          >
+            All slots →
+          </Link>
+        </div>
+      </div>
     </>
   )
 }

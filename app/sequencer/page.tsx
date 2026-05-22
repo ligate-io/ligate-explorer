@@ -1,10 +1,8 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { getInfo, getLatestBlocks } from '@/lib/api'
-import { ago, isoDate, trunc } from '@/lib/format'
 import { CopyButton } from '@/components/copy-button'
-import { ArrowRight } from '@/components/svgs'
-import { Eyebrow, FrameCard } from '@/components/ui'
+import { LiveSequencerSurface } from '@/components/live-cards'
+import { Eyebrow } from '@/components/ui'
 
 export const metadata: Metadata = { title: 'Sequencer' }
 export const dynamic = 'force-dynamic'
@@ -13,10 +11,17 @@ export const dynamic = 'force-dynamic'
 // operator producing every block; this page reads the proposer field
 // off the most-recent slot, falls back through the recent-slots
 // sample for the first non-null entry (legacy pre-PR-#44 slots ship
-// null), then shows total slots produced + block time + a list of
-// the last 10 slots. Multi-sequencer would mean splitting this into
-// `/sequencer/[address]` later; the routing is intentionally a single
-// page for now so it can't go stale against the chain config.
+// null), then hands the stats + table off to <LiveSequencerSurface />
+// which polls /v1/info + /v1/blocks every 6s so new slots appear
+// without the user reloading.
+//
+// What stays server-rendered: the operator address header + body
+// paragraph + footer note. Those don't change between slots (single
+// sequencer for the duration of devnet) so polling them would burn
+// cycles for no value.
+//
+// Multi-sequencer later would split this into `/sequencer/[address]`
+// plus a list page.
 
 const RECENT_SAMPLE = 20
 
@@ -31,14 +36,6 @@ export default async function SequencerPage() {
   // into the headline just because the latest block happens to be old.
   const operator =
     recent.find((b) => b.proposer != null)?.proposer ?? null
-
-  const slotsProduced = info.latest_block
-  const blockTime = info.finality
-  const latestSlot = recent[0]
-  const latestSlotAge =
-    latestSlot != null
-      ? ago(Math.floor((Date.now() - latestSlot.timestamp) / 1000))
-      : '—'
 
   return (
     <>
@@ -72,8 +69,9 @@ export default async function SequencerPage() {
         </p>
       </div>
 
-      {/* Operator address strip. Mono + copy button, mirrors the
-          address-detail page's header for consistency. */}
+      {/* Operator address strip — static SSR. The operator wallet
+          doesn't change between slots on single-sequencer, so this
+          stays out of the live polling loop. */}
       <div style={{ marginTop: 40 }}>
         <Eyebrow>Celestia DA address</Eyebrow>
         <div
@@ -99,198 +97,17 @@ export default async function SequencerPage() {
         </div>
       </div>
 
-      {/* Stats strip. Same shape as /holders + /blocks list headers
-          so the chain-primitive routes feel like one family. */}
-      <div
-        className="grid-stats-3"
-        style={{ marginTop: 40, gap: 0 }}
-      >
-        {[
-          {
-            label: 'Slots produced',
-            value: '#' + slotsProduced.toLocaleString(),
-            sub: 'all-time on devnet-1',
-          },
-          {
-            label: 'Block time',
-            value: blockTime,
-            sub: 'measured slot interval',
-          },
-          {
-            label: 'Latest slot',
-            value: latestSlot ? '#' + latestSlot.height.toLocaleString() : '—',
-            sub: latestSlot ? `${latestSlotAge}` : 'no slots indexed yet',
-          },
-        ].map((t, i) => (
-          <FrameCard
-            key={i}
-            padding={20}
-            style={{
-              borderRight: i === 2 ? '1px solid var(--color-line)' : 0,
-            }}
-          >
-            <div
-              className="mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.22em',
-                textTransform: 'uppercase',
-                color: 'var(--color-subtle)',
-                marginBottom: 10,
-              }}
-            >
-              {t.label}
-            </div>
-            <div
-              className="serif"
-              style={{
-                fontSize: 36,
-                lineHeight: 1,
-                color: 'var(--color-ink)',
-              }}
-            >
-              {t.value}
-            </div>
-            <div
-              className="mono"
-              style={{
-                marginTop: 10,
-                fontSize: 9,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
-                color: 'var(--color-subtle)',
-              }}
-            >
-              {t.sub}
-            </div>
-          </FrameCard>
-        ))}
-      </div>
-
-      {/* Recent slots table. Each row is a block this operator proposed;
-          on a single-sequencer chain that's just the recent-blocks
-          sample, with the proposer column dropped (it would be the
-          same address on every row). */}
-      <div style={{ marginTop: 56 }}>
-        <Eyebrow>Recent slots produced</Eyebrow>
-        <FrameCard padding={0} style={{ marginTop: 12 }} scrollX>
-          <table className="tbl tab-num">
-            <thead>
-              <tr>
-                <th>Slot</th>
-                <th>Hash</th>
-                <th>Txs</th>
-                <th>Finality</th>
-                <th>Time</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    style={{
-                      padding: '48px 22px',
-                      textAlign: 'center',
-                      color: 'var(--color-subtle)',
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{ fontSize: 11, letterSpacing: '0.18em' }}
-                    >
-                      No slots indexed yet
-                    </span>
-                  </td>
-                </tr>
-              ) : (
-                recent.slice(0, 10).map((b) => {
-                  const finalized = b.finality_status === 'finalized'
-                  const pending = b.finality_status === 'pending'
-                  const finalityLabel = finalized
-                    ? 'finalized'
-                    : pending
-                      ? 'pending DA'
-                      : '—'
-                  const finalityColor = finalized
-                    ? 'var(--color-accent)'
-                    : pending
-                      ? 'var(--color-amber)'
-                      : 'var(--color-subtle)'
-                  return (
-                    <tr key={b.height}>
-                      <td>
-                        <Link
-                          href={`/blocks/${b.height}`}
-                          className="mono link"
-                          style={{ color: 'var(--color-ink)' }}
-                        >
-                          #{b.height}
-                        </Link>
-                      </td>
-                      <td>
-                        <span className="h-mono" title={b.hash}>
-                          {trunc(b.hash, 10, 6)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="mono">{b.tx_count}</span>
-                      </td>
-                      <td>
-                        <span
-                          className="mono"
-                          style={{
-                            fontSize: 10,
-                            letterSpacing: '0.18em',
-                            textTransform: 'uppercase',
-                            color: finalityColor,
-                          }}
-                        >
-                          {finalityLabel}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className="mono"
-                          style={{ color: 'var(--color-muted)' }}
-                          title={isoDate(b.timestamp)}
-                        >
-                          {ago(Math.floor((Date.now() - b.timestamp) / 1000))}
-                        </span>
-                      </td>
-                      <td style={{ width: 24, textAlign: 'right' }}>
-                        <span className="row-arrow">
-                          <ArrowRight />
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </FrameCard>
-        <div
-          style={{
-            marginTop: 12,
-            display: 'flex',
-            justifyContent: 'flex-end',
-          }}
-        >
-          <Link
-            href="/blocks"
-            className="mono link"
-            style={{
-              fontSize: 11,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-            }}
-          >
-            All slots →
-          </Link>
-        </div>
-      </div>
+      {/* Live stats + recent slots table. Polls /v1/info + /v1/blocks
+          on a 6s cadence; new slots stream in without a manual reload.
+          Hands the SSR snapshot in as `initial` so first paint is fully
+          populated (no skeleton flicker on hydration). */}
+      <LiveSequencerSurface
+        initial={{
+          chainHead: info.latest_block,
+          blockTime: info.finality,
+          blocks: recent.slice(0, 10),
+        }}
+      />
 
       <p
         style={{
