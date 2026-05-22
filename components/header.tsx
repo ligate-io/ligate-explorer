@@ -15,7 +15,6 @@ const TABS = [
   { id: 'schemas', label: 'Schemas', href: '/schemas' },
   { id: 'holders', label: 'Holders', href: '/holders' },
   { id: 'faucet', label: 'Faucet', href: '/faucet' },
-  { id: 'cluster', label: 'Cluster', href: '/cluster' },
   { id: 'info', label: 'Info', href: '/info' },
 ]
 
@@ -39,7 +38,6 @@ function activeTab(pathname: string): string | null {
   if (pathname.startsWith('/holders') || pathname.startsWith('/address/'))
     return 'holders'
   if (pathname.startsWith('/faucet')) return 'faucet'
-  if (pathname.startsWith('/cluster')) return 'cluster'
   if (pathname.startsWith('/info')) return 'info'
   return null
 }
