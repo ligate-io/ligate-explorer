@@ -3,10 +3,20 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAttestationItem, getSchema, getTx } from '@/lib/api'
 import { ago, fmtLgt, fmtLgtTrim, isoDate, trunc } from '@/lib/format'
+import { AttestationPending } from '@/components/attestation-pending'
 import { CopyButton } from '@/components/copy-button'
 import { Eyebrow, LV } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
+
+// Bech32m attestation id: `lat1<58 chars>` per ligate-chain v0.2.0+
+// (`impl_hash32_type!(AttestationId, …, "lat")`). The HRP is fixed at
+// `lat1`; the payload is bech32-encoded 32 raw bytes + 6-char checksum.
+// Range tolerant: 50-80 chars after the HRP to absorb future encoding
+// tweaks without regressing this check.
+function isWellFormedAttestationId(id: string): boolean {
+  return /^lat1[a-z0-9]{50,80}$/.test(id)
+}
 
 export async function generateMetadata({
   params,
@@ -33,7 +43,15 @@ export default async function AttestationPage({
 }) {
   const { id } = await params
   const a = await getAttestationItem(id)
-  if (!a) notFound()
+  if (!a) {
+    // Indexer race: a product like Themisra has soft-verified the
+    // attestation and linked here, but the chain → indexer ingest
+    // hasn't caught up yet. Render the polling "pending" view rather
+    // than a hard 404. Junk ids that don't even match `lat1…` still
+    // 404 through to the branded not-found.tsx.
+    if (isWellFormedAttestationId(id)) return <AttestationPending id={id} />
+    notFound()
+  }
   // Schema gives us the human name + threshold; tx gives us the
   // gas + protocol fee burned to land this attestation on chain.
   // Both are best-effort — the page still renders if either 5xx's.
