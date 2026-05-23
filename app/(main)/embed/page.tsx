@@ -5,7 +5,28 @@ import { trunc } from '@/lib/format'
 import { CopyButton } from '@/components/copy-button'
 import { Eyebrow, FrameCard } from '@/components/ui'
 
-export const metadata: Metadata = { title: 'Embed widgets' }
+// Page metadata. Custom OG/Twitter title + description so DM'd /embed
+// URLs read as a partner pitch ("drop the chain into your site"), not
+// the generic site title. The actual image is auto-picked up by Next
+// from the colocated `opengraph-image.tsx` so we don't restate it here.
+export const metadata: Metadata = {
+  title: 'Embed widgets',
+  description:
+    'Drop-in iframe widgets for the Ligate chain: live chain head, block height, per-schema attestation count, and a latest-attestations feed. One snippet, no JS bundle.',
+  openGraph: {
+    title: 'Embed widgets · Ligate Explorer',
+    description:
+      'Live Ligate-chain widgets your partners can iframe in one paste. Chain head, block height, per-schema counts, attestation feed.',
+    url: 'https://explorer.ligate.io/embed',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Embed widgets · Ligate Explorer',
+    description:
+      'Drop-in iframe widgets for the Ligate chain. One snippet, no JS bundle.',
+  },
+}
 export const dynamic = 'force-dynamic'
 
 // Partner-facing docs page for the embed widgets. Lives under
@@ -13,9 +34,11 @@ export const dynamic = 'force-dynamic'
 // here from a tweet / outreach email get the normal nav so they
 // can poke around the rest of the site too.
 //
-// Two widgets shipped today:
+// Four widgets shipped today:
 //   - /embed/chain-head                   — generic "chain alive" pill
+//   - /embed/block-height                 — decorative big-serif counter
 //   - /embed/attestation-count/[schemaId] — per-schema live count
+//   - /embed/latest-attestations          — feed of last 5 attestations
 //
 // For each, render a live preview embedded in an <iframe> + the
 // canonical iframe HTML snippet with a CopyButton. Sample schema
@@ -28,8 +51,12 @@ export const dynamic = 'force-dynamic'
 // what each widget renders at comfortably.
 const CHAIN_HEAD_W = 260
 const CHAIN_HEAD_H = 36
+const BLOCK_HEIGHT_W = 280
+const BLOCK_HEIGHT_H = 140
 const ATTESTATION_COUNT_W = 320
 const ATTESTATION_COUNT_H = 120
+const LATEST_ATTESTATIONS_W = 360
+const LATEST_ATTESTATIONS_H = 320
 
 const FALLBACK_SAMPLE_SCHEMA =
   'lsc1n6rr5y4m7xma6k7wnjv48jcpcl43wj03l6ty83e8qddwtslfznzq88nhpn'
@@ -54,11 +81,23 @@ export default async function EmbedIndexPage() {
     CHAIN_HEAD_H,
     'Ligate chain head',
   )
+  const blockHeightSnippet = buildIframe(
+    'https://explorer.ligate.io/embed/block-height',
+    BLOCK_HEIGHT_W,
+    BLOCK_HEIGHT_H,
+    'Ligate block height',
+  )
   const attestationCountSnippet = buildIframe(
     `https://explorer.ligate.io/embed/attestation-count/${sampleSchemaId}`,
     ATTESTATION_COUNT_W,
     ATTESTATION_COUNT_H,
     `Ligate attestation count · ${sampleSchemaLabel}`,
+  )
+  const latestAttestationsSnippet = buildIframe(
+    'https://explorer.ligate.io/embed/latest-attestations',
+    LATEST_ATTESTATIONS_W,
+    LATEST_ATTESTATIONS_H,
+    'Ligate latest attestations',
   )
 
   return (
@@ -114,6 +153,26 @@ export default async function EmbedIndexPage() {
       </div>
 
       <div style={{ marginTop: 56 }}>
+        <Eyebrow>Block height</Eyebrow>
+        <p
+          style={{
+            color: 'var(--color-muted)',
+            maxWidth: 560,
+            marginTop: 14,
+            marginBottom: 18,
+          }}
+        >
+          Decorative big-serif counter; the height number is the whole composition. Refreshes every 6 seconds. Good for hero banners and portfolio dashboards where you want a centerpiece moment, not a status pill.
+        </p>
+        <WidgetPreview
+          embedPath="/embed/block-height"
+          width={BLOCK_HEIGHT_W}
+          height={BLOCK_HEIGHT_H}
+          snippet={blockHeightSnippet}
+        />
+      </div>
+
+      <div style={{ marginTop: 56 }}>
         <Eyebrow>Attestation count</Eyebrow>
         <p
           style={{
@@ -152,6 +211,26 @@ export default async function EmbedIndexPage() {
             {trunc(sampleSchemaId, 10, 6)}
           </Link>
         </p>
+      </div>
+
+      <div style={{ marginTop: 56 }}>
+        <Eyebrow>Latest attestations</Eyebrow>
+        <p
+          style={{
+            color: 'var(--color-muted)',
+            maxWidth: 560,
+            marginTop: 14,
+            marginBottom: 18,
+          }}
+        >
+          Live feed of the last 5 attestations across all schemas. Refreshes every 15 seconds. Each row links through to the attestation detail on the explorer. Good for aggregator dashboards and status pages showing chain activity.
+        </p>
+        <WidgetPreview
+          embedPath="/embed/latest-attestations"
+          width={LATEST_ATTESTATIONS_W}
+          height={LATEST_ATTESTATIONS_H}
+          snippet={latestAttestationsSnippet}
+        />
       </div>
 
       <p
