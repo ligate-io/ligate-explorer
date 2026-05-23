@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatRelativeTime, trunc } from '@/lib/format'
+import { useLivePoll } from '@/lib/use-live-poll'
 
 const apiBase = (
   process.env.NEXT_PUBLIC_API_URL ?? 'https://api.ligate.io'
@@ -60,38 +61,12 @@ export function LiveLatestAttestations({
   const [rows, setRows] = useState(initial)
   const [, setTick] = useState(0)
 
-  // Poll fresh rows
-  useEffect(() => {
-    let cancelled = false
-    let id: ReturnType<typeof setTimeout> | null = null
-    const tick = async () => {
-      const next = await fetchRows(limit)
-      if (cancelled) return
-      if (next) setRows(next)
-      if (!cancelled) id = setTimeout(tick, POLL_MS)
-    }
-    const start = () => {
-      if (id) return
-      id = setTimeout(tick, POLL_MS)
-    }
-    const stop = () => {
-      if (id) {
-        clearTimeout(id)
-        id = null
-      }
-    }
-    const onVis = () => {
-      if (document.visibilityState === 'visible') start()
-      else stop()
-    }
-    document.addEventListener('visibilitychange', onVis)
-    if (document.visibilityState === 'visible') start()
-    return () => {
-      cancelled = true
-      document.removeEventListener('visibilitychange', onVis)
-      stop()
-    }
-  }, [limit])
+  // Poll fresh rows. Visibility-awareness + cancellation owned by
+  // the shared `useLivePoll` hook.
+  useLivePoll(async () => {
+    const next = await fetchRows(limit)
+    if (next) setRows(next)
+  }, POLL_MS)
 
   // 10s tick to refresh the "Ns ago" labels without re-polling the api
   useEffect(() => {

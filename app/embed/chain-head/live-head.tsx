@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useLivePoll } from '@/lib/use-live-poll'
 
 const apiBase = (
   process.env.NEXT_PUBLIC_API_URL ?? 'https://api.ligate.io'
 ).replace(/\/+$/, '')
 
 // Live chain-head polling for the chain-head embed widget. Polls
-// /v1/info every 6s while the host tab is visible — stops when
+// /v1/info every 6s while the host tab is visible: stops when
 // hidden so we don't burn the api on background tabs in dozens of
-// partner sites at once.
+// partner sites at once. Visibility-awareness + cancellation are
+// owned by the shared `useLivePoll` hook.
 //
 // Renders a compact pill: live dot + chain id + "#height". Wrapped
 // in an <a> that opens the explorer home in a new tab so a click
@@ -42,40 +44,12 @@ export function LiveChainHead({ initial }: { initial: Initial }) {
   const [chainId, setChainId] = useState(initial.chainId)
   const [head, setHead] = useState(initial.latestBlock)
 
-  useEffect(() => {
-    let cancelled = false
-    let id: ReturnType<typeof setTimeout> | null = null
-    const tick = async () => {
-      const next = await fetchHead()
-      if (cancelled) return
-      if (next) {
-        setChainId(next.chain_id)
-        if (next.indexer_height != null) setHead(next.indexer_height)
-      }
-      if (!cancelled) id = setTimeout(tick, POLL_MS)
-    }
-    const start = () => {
-      if (id) return
-      id = setTimeout(tick, POLL_MS)
-    }
-    const stop = () => {
-      if (id) {
-        clearTimeout(id)
-        id = null
-      }
-    }
-    const onVis = () => {
-      if (document.visibilityState === 'visible') start()
-      else stop()
-    }
-    document.addEventListener('visibilitychange', onVis)
-    if (document.visibilityState === 'visible') start()
-    return () => {
-      cancelled = true
-      document.removeEventListener('visibilitychange', onVis)
-      stop()
-    }
-  }, [])
+  useLivePoll(async () => {
+    const next = await fetchHead()
+    if (!next) return
+    setChainId(next.chain_id)
+    if (next.indexer_height != null) setHead(next.indexer_height)
+  }, POLL_MS)
 
   return (
     <a

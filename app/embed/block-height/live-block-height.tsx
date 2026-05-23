@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useLivePoll } from '@/lib/use-live-poll'
 
 // Live-polling counter for the block-height embed widget. Same /v1/info
-// + 6s cadence + visibility-aware shape as /embed/chain-head's poller,
-// but the render is different: this one is a decorative big-serif
-// number (centerpiece composition), not an operational pill.
+// + 6s cadence as /embed/chain-head's poller (shared via the
+// `useLivePoll` hook), but the render is different: this one is a
+// decorative big-serif number (centerpiece composition), not an
+// operational pill.
 
 const apiBase = (
   process.env.NEXT_PUBLIC_API_URL ?? 'https://api.ligate.io'
@@ -38,40 +40,12 @@ export function LiveBlockHeight({ initial }: { initial: Initial }) {
   const [chainId, setChainId] = useState(initial.chainId)
   const [head, setHead] = useState(initial.latestBlock)
 
-  useEffect(() => {
-    let cancelled = false
-    let id: ReturnType<typeof setTimeout> | null = null
-    const tick = async () => {
-      const next = await fetchHead()
-      if (cancelled) return
-      if (next) {
-        setChainId(next.chain_id)
-        if (next.indexer_height != null) setHead(next.indexer_height)
-      }
-      if (!cancelled) id = setTimeout(tick, POLL_MS)
-    }
-    const start = () => {
-      if (id) return
-      id = setTimeout(tick, POLL_MS)
-    }
-    const stop = () => {
-      if (id) {
-        clearTimeout(id)
-        id = null
-      }
-    }
-    const onVis = () => {
-      if (document.visibilityState === 'visible') start()
-      else stop()
-    }
-    document.addEventListener('visibilitychange', onVis)
-    if (document.visibilityState === 'visible') start()
-    return () => {
-      cancelled = true
-      document.removeEventListener('visibilitychange', onVis)
-      stop()
-    }
-  }, [])
+  useLivePoll(async () => {
+    const next = await fetchHead()
+    if (!next) return
+    setChainId(next.chain_id)
+    if (next.indexer_height != null) setHead(next.indexer_height)
+  }, POLL_MS)
 
   return (
     <a
