@@ -73,7 +73,13 @@ export function AttestationPending({ id }: { id: string }) {
         <CopyButton value={id} />
       </div>
 
-      <FrameCard padding={24} style={{ marginTop: 36 }}>
+      {/* Cap the card width at ~720px so it sits flush with the body
+          paragraph inside (maxWidth: 600 + 24px padding × 2 + a few
+          breathing pixels). Without this the FrameCard stretches the
+          full page-wrap width (~1200px) and the rendered card has a
+          huge empty rail on the right of the text — visually noisy
+          on this otherwise sparse pending state. */}
+      <FrameCard padding={24} style={{ marginTop: 36, maxWidth: 720 }}>
         <div
           className="mono"
           style={{

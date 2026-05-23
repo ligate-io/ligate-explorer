@@ -139,6 +139,47 @@ export default function Loading() {
           ))}
         </div>
 
+        {/* Faucet activity skeleton (pool / drips today / drips in
+            sample). All three values are async (treasury balance +
+            counts derived from /v1/addresses/{treasury}/txs) so skel
+            each big number; labels + subtitles render real because
+            they're static. */}
+        <div className="grid-stats-3" style={{ marginTop: 24, gap: 24 }}>
+          {[
+            { k: 'Faucet pool', sub: 'treasury wallet balance' },
+            { k: 'Drips today', sub: 'transfers from treasury · last 24h' },
+            { k: 'Drips in sample', sub: 'all-time on devnet-1' },
+          ].map((it) => (
+            <div key={it.k}>
+              <div
+                className="mono"
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.22em',
+                  textTransform: 'uppercase',
+                  color: 'var(--color-subtle)',
+                  marginBottom: 8,
+                }}
+              >
+                {it.k}
+              </div>
+              <SkelBlock width={110} height={26} />
+              <div
+                className="mono"
+                style={{
+                  fontSize: 9,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: 'var(--color-subtle)',
+                  marginTop: 6,
+                }}
+              >
+                {it.sub}
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* Discord callout mirror. Real content (not skel'd) because
             it's static text — the page swap-in shows the same block. */}
         <a

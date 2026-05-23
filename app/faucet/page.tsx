@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { getInfo } from '@/lib/api'
+import { getAddressTxs, getInfo, getStatsTotals } from '@/lib/api'
+import { fmtLgtCompact } from '@/lib/format'
 import { FaucetBgImage } from '@/components/faucet-bg-image'
 import { Eyebrow } from '@/components/ui'
 import { FaucetForm } from './faucet-form'
@@ -7,13 +8,45 @@ import { FaucetForm } from './faucet-form'
 export const metadata: Metadata = { title: 'Faucet' }
 export const dynamic = 'force-dynamic'
 
+// Window for the "drips today" count. Slightly looser than 24h
+// because the api samples up to 100 recent txs and the faucet may
+// drip more than that in a real day — extending the window past
+// 24h doesn't help if we're already sample-bound, but at sparse
+// devnet traffic 24h fits comfortably.
+const DRIPS_WINDOW_MS = 24 * 60 * 60 * 1000
+
 export default async function FaucetPage() {
-  // Real block time for the "Confirmation" stat. info.finality is now
-  // the measured rollup slot interval (~6s on devnet) sourced from
-  // /v1/stats/next-block-eta — same number the dashboard's Block time
-  // tile + the BlockTickerCard show. Falls back to "~12s" if the eta
-  // endpoint is unreachable (matches the OLD hardcoded value).
-  const info = await getInfo().catch(() => null)
+  // Three parallel reads:
+  //   - /v1/info             → block time for the Confirmation tile
+  //   - /v1/stats/totals     → treasury balance + treasury address
+  //   - /v1/addresses/{treasury}/txs (limit 100) → drip activity
+  // Treasury address comes from totals, so the txs fetch is sequential
+  // on totals — but both fail-soft so a totals 5xx still renders the
+  // form + the Confirmation tile + the Discord callout.
+  const [info, totals] = await Promise.all([
+    getInfo().catch(() => null),
+    getStatsTotals().catch(() => null),
+  ])
+  const treasury = totals?.treasury_address
+  const treasuryTxs = treasury
+    ? await getAddressTxs(treasury, undefined, 100).catch(() => ({
+        items: [],
+        nextCursor: null,
+      }))
+    : { items: [], nextCursor: null }
+  const sampleTransfers = treasuryTxs.items.filter(
+    (t) => t.type === 'Transfer',
+  )
+  const nowMs = Date.now()
+  const dripsLast24h = sampleTransfers.filter(
+    (t) => nowMs - t.timestamp < DRIPS_WINDOW_MS,
+  ).length
+  const sampleSaturated =
+    treasuryTxs.items.length >= 100 && treasuryTxs.nextCursor != null
+  const poolLabel = totals?.treasury_balance_nano
+    ? fmtLgtCompact(totals.treasury_balance_nano) + ' LGT'
+    : '—'
+
   const confirmation = info?.finality ?? '~12s'
   return (
     <div style={{ position: 'relative' }}>
@@ -86,6 +119,80 @@ export default async function FaucetPage() {
             </div>
           ))}
         </div>
+
+        {/* Live faucet activity. Pool = remaining treasury balance
+            (= drippable supply). Drips today = transfer-kind txs from
+            the treasury in the last 24h. Sample = total transfer txs
+            in the 100-tx api window; flagged as `~` when there are
+            more pages beyond it so the user reads it as a floor not
+            an exact count. Whole strip renders only when totals
+            resolved — otherwise the faucet form still works without
+            stats. */}
+        {totals ? (
+          <div
+            className="grid-stats-3"
+            style={{ marginTop: 24, gap: 24 }}
+          >
+            {[
+              {
+                k: 'Faucet pool',
+                v: poolLabel,
+                sub: 'treasury wallet balance',
+              },
+              {
+                k: 'Drips today',
+                v: dripsLast24h.toLocaleString(),
+                sub: 'transfers from treasury · last 24h',
+              },
+              {
+                k: 'Drips in sample',
+                v:
+                  (sampleSaturated ? '~' : '') +
+                  sampleTransfers.length.toLocaleString(),
+                sub: sampleSaturated
+                  ? 'last 100 treasury txs (floor)'
+                  : 'all-time on devnet-1',
+              },
+            ].map((it) => (
+              <div key={it.k}>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    color: 'var(--color-subtle)',
+                    marginBottom: 8,
+                  }}
+                >
+                  {it.k}
+                </div>
+                <div
+                  className="serif"
+                  style={{
+                    color: 'var(--color-ink)',
+                    fontSize: 24,
+                    lineHeight: 1.1,
+                  }}
+                >
+                  {it.v}
+                </div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9,
+                    letterSpacing: '0.16em',
+                    textTransform: 'uppercase',
+                    color: 'var(--color-subtle)',
+                    marginTop: 6,
+                  }}
+                >
+                  {it.sub}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {/* Discord callout. The public faucet caps at 100 LGT per
             address per 24h; anyone needing bulk drips for chain

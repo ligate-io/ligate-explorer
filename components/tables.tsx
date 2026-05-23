@@ -232,6 +232,7 @@ export function TxsTable({
   showBlock = true,
   compact = false,
   labels,
+  suppressLabelFor,
 }: {
   rows: Tx[]
   showBlock?: boolean
@@ -249,6 +250,13 @@ export function TxsTable({
    *  in lib/address-labels.ts. Compact mode (homepage card) skips
    *  the badge to keep row height stable. */
   labels?: AddressLabelMap
+  /** Address that's the *subject* of the surrounding page (typically
+   *  the `addr` param on /address/[addr]). Sender cells where
+   *  `sender === suppressLabelFor` skip the badge entirely — the
+   *  page headline already labels that address once, so repeating it
+   *  on every row of its own tx history is visual noise. Leave undef
+   *  on the global /txs list (every sender deserves the badge). */
+  suppressLabelFor?: string
 }) {
   const router = useRouter()
   // See BlocksTable: callers wrap us in `<FrameCard scrollX>` to opt
@@ -307,9 +315,13 @@ export function TxsTable({
                 {trunc(t.sender, 6, 4)}
               </span>
               {/* Skip the badge in compact mode (homepage card) to keep
-                  row heights aligned with BlocksTable. Detail / list
-                  pages get the badge. */}
-              {!compact ? <AddressBadge addr={t.sender} labels={labels} /> : null}
+                  row heights aligned with BlocksTable. Also skip when
+                  the sender IS the page subject — the headline above
+                  the table has already labelled it once. Detail / list
+                  pages with no subject (e.g. /txs) get the badge. */}
+              {!compact && t.sender !== suppressLabelFor ? (
+                <AddressBadge addr={t.sender} labels={labels} />
+              ) : null}
             </td>
             <td>
               {compact ? (

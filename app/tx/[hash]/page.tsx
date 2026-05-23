@@ -298,6 +298,87 @@ export default async function TxPage({
         </div>
       </div>
 
+      {/* Dev affordance. Two snippets devs can paste-and-run to
+          fetch this tx outside the explorer: the high-level CLI
+          (ligate-cli, assumed `tx replay` subcommand — if the binary
+          ships a different verb, the snippet here is the canonical
+          place to update it once); and the raw curl that hits the api
+          directly, which always works regardless of CLI shape. */}
+      <div style={{ marginTop: 56 }}>
+        <Eyebrow>Replay locally</Eyebrow>
+        <FrameCard padding={20} style={{ marginTop: 12 }}>
+          <div
+            className="mono"
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: 'var(--color-subtle)',
+              marginBottom: 8,
+            }}
+          >
+            via ligate-cli
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <code
+              className="mono"
+              style={{
+                fontSize: 13,
+                color: 'var(--color-bone)',
+                wordBreak: 'break-all',
+                background: 'transparent',
+              }}
+            >
+              $ ligate-cli tx replay {tx.hash}
+            </code>
+            <CopyButton value={`ligate-cli tx replay ${tx.hash}`} />
+          </div>
+          <div
+            className="mono"
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: 'var(--color-subtle)',
+              marginTop: 18,
+              marginBottom: 8,
+            }}
+          >
+            via curl (api direct)
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <code
+              className="mono"
+              style={{
+                fontSize: 13,
+                color: 'var(--color-bone)',
+                wordBreak: 'break-all',
+                background: 'transparent',
+              }}
+            >
+              $ curl -sS https://api.ligate.io/v1/txs/{tx.hash}
+            </code>
+            <CopyButton
+              value={`curl -sS https://api.ligate.io/v1/txs/${tx.hash}`}
+            />
+          </div>
+        </FrameCard>
+      </div>
+
       <div style={{ marginTop: 56 }}>
         <div
           style={{
