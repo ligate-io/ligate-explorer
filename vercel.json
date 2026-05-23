@@ -12,7 +12,6 @@
   "ignoreCommand": "git diff --quiet HEAD^ HEAD ':(exclude)README.md' ':(exclude)docs/**'",
   "headers": [
     {
-      "//": "Default hardening: clickjacking-protect everything EXCEPT the partner-iframe widget routes (/embed/<widget>). The /embed docs page itself stays protected because the negative-lookahead matches `embed/` (with trailing slash), so only sub-paths are exempted.",
       "source": "/((?!embed/).*)",
       "headers": [
         {
@@ -30,7 +29,6 @@
       ]
     },
     {
-      "//": "Partner-iframe widgets must be embeddable from any origin. Keep nosniff + a stricter Referrer-Policy (no-referrer) so the widget can't leak the host page URL back to our api logs.",
       "source": "/embed/:path*",
       "headers": [
         {
