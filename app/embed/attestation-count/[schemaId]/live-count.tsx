@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useLivePoll } from '@/lib/use-live-poll'
 
 // Browser-side base. Same env var the SSR fetcher reads. Trailing
 // slash trimmed so concat is predictable.
@@ -9,14 +10,14 @@ const apiBase = (
 ).replace(/\/+$/, '')
 
 // Live-polling widget body. Refreshes the count via /v1/schemas/{id}
-// every 10s — slower than the home page polls because partners are
+// every 10s; slower than the home page polls because partners are
 // the ones embedding this, and we'd rather under-load their iframe
 // than nail the api with one request per partner-tab every 6s.
 //
 // Renders a compact card: schema name + version eyebrow on top, big
 // serif count in the middle, "live · last updated Ns ago" footer.
 // All wrapped in an <a> that opens the explorer's schema detail in
-// a new tab — partners get a "click for more" affordance for free.
+// a new tab so partners get a "click for more" affordance for free.
 
 interface Initial {
   name: string
@@ -54,52 +55,18 @@ export function LiveSchemaAttestationCount({
   const [updatedAt, setUpdatedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
 
-  // Poll for fresh count. Visibility-aware: stops when the host tab
-  // is hidden so a forgotten background tab doesn't keep poking the
-  // api forever.
-  useEffect(() => {
-    let cancelled = false
-    let id: ReturnType<typeof setTimeout> | null = null
-    const tick = async () => {
-      const next = await fetchCount(schemaId)
-      if (cancelled) return
-      if (next != null && next !== count) {
-        setCount(next)
-        setUpdatedAt(Date.now())
-      } else if (next != null) {
-        // Same count — still update the timestamp so "last updated"
-        // reads like a heartbeat rather than a stale read.
-        setUpdatedAt(Date.now())
-      }
-      if (!cancelled) id = setTimeout(tick, POLL_MS)
-    }
-    const start = () => {
-      if (id) return
-      id = setTimeout(tick, POLL_MS)
-    }
-    const stop = () => {
-      if (id) {
-        clearTimeout(id)
-        id = null
-      }
-    }
-    const onVis = () => {
-      if (document.visibilityState === 'visible') start()
-      else stop()
-    }
-    document.addEventListener('visibilitychange', onVis)
-    if (document.visibilityState === 'visible') start()
-    return () => {
-      cancelled = true
-      document.removeEventListener('visibilitychange', onVis)
-      stop()
-    }
-    // We intentionally don't depend on `count` here — the closure
-    // reads the latest count via setState's callback form when it
-    // needs to compare. Including it would tear down + rebuild the
-    // interval on every count change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schemaId])
+  // Poll for fresh count. Visibility-awareness and cancellation are
+  // owned by the shared `useLivePoll` hook. Always bump `updatedAt`
+  // on a successful poll so "last updated" reads like a heartbeat
+  // rather than a stale read, even when the count itself is unchanged
+  // (React bails out on identical primitive state, so setCount with
+  // the same number is a no-op render).
+  useLivePoll(async () => {
+    const next = await fetchCount(schemaId)
+    if (next == null) return
+    setCount(next)
+    setUpdatedAt(Date.now())
+  }, POLL_MS)
 
   // 1s wall clock for the "Ns ago" countup. Lighter than polling the
   // api just to refresh a label.
