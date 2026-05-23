@@ -6,11 +6,6 @@ import { Analytics } from '@vercel/analytics/next'
 // rules pointing at them. No googleapis.com, no gstatic.com, no
 // runtime font fetch — bytes ship with the JS bundle and are cached
 // like any other static asset.
-//
-// (Was on next/font/google which DID self-host at build time, but
-// the user wanted hard guarantees that the font setup couldn't be
-// the source of any flash. @fontsource keeps everything in
-// node_modules — easier to reason about, easier to audit.)
 import '@fontsource/instrument-serif/400.css'
 import '@fontsource/instrument-serif/400-italic.css'
 import '@fontsource/space-grotesk/300.css'
@@ -23,10 +18,16 @@ import '@fontsource/jetbrains-mono/500.css'
 import '@fontsource/jetbrains-mono/600.css'
 import './globals.css'
 
-import { ApiHealthBanner } from '@/components/api-health-banner'
-import { IndexerBanner } from '@/components/indexer-banner'
-import { Footer } from '@/components/footer'
-import { Header } from '@/components/header'
+// Minimal root layout. Owns the <html>/<body> shell, font loading,
+// the global metadata defaults, and Analytics — that's it. Chrome
+// (header, footer, banners, page-wrap) lives in `app/(main)/layout.tsx`
+// so the embed route group can opt OUT of all of it.
+//
+// Why route groups instead of conditional rendering: in Next 16 the
+// root layout always wraps EVERY route. The only way to give partner
+// iframes a clean chromeless surface is to split the tree — main
+// routes nest under `(main)`, embed routes nest under `embed/`, and
+// each route group's layout decides what chrome to add.
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://explorer.ligate.io'),
@@ -51,12 +52,10 @@ export const metadata: Metadata = {
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
   },
   manifest: '/site.webmanifest',
-  // Open Graph + Twitter cards. Next auto-resolves the image URLs
-  // from `app/opengraph-image.tsx` (1200x630 dynamic generator that
-  // pulls live chain head); explicit `images: ['/opengraph-image']`
-  // would also work but the file-based convention is what Next does
-  // by default — keeping these blocks for the rest of the metadata
-  // (url, siteName, locale, twitter card type, etc.).
+  // OG + Twitter inherited by every route. (main) keeps these as-is;
+  // embed pages override `robots` to noindex (already noindex above)
+  // and don't need their own OG since iframes don't trigger share
+  // previews.
   openGraph: {
     type: 'website',
     url: 'https://explorer.ligate.io',
@@ -82,38 +81,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body
-        className="grain"
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {/* Operational banners. Both render nothing in the healthy
-            case and never render together — `ApiHealthBanner` covers
-            api-unreachable (5xx / network), `IndexerBanner` covers
-            api-alive-but-indexer-behind (head_lag_slots > threshold).
-            Sit above <Header /> so they pin to the top of the viewport. */}
-        <ApiHealthBanner />
-        <IndexerBanner />
-        <Header />
-        <main
-          className="page-anim"
-          style={{
-            paddingTop: 16,
-            paddingBottom: 40,
-            flex: 1,
-          }}
-        >
-          <div className="page-wrap">{children}</div>
-        </main>
-        <Footer />
+      {/* No bg / no flex on body — those are route-group concerns. The
+          (main) wrapper paints obsidian + grain; embed wrappers leave
+          the surface transparent so the host iframe controls bg. */}
+      <body style={{ margin: 0 }}>
+        {children}
         {/* Vercel Web Analytics. No-op in dev (the script self-disables
             when window.location.hostname is localhost). Goes live the
             moment this app is deployed to the Vercel project that
             owns explorer.ligate.io. Counts page views + visitors +
-            referrers; no cookies, no personal data collection. */}
+            referrers; no cookies, no personal data collection.
+
+            Mounted at the root so both (main) and embed routes are
+            counted — useful for knowing whether anyone actually
+            iframes the embed widgets in the wild. */}
         <Analytics />
       </body>
     </html>
