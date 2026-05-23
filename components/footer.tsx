@@ -7,6 +7,11 @@
 
 const LINKS: { label: string; href: string; external?: boolean }[] = [
   { label: 'docs.ligate.io', href: 'https://docs.ligate.io', external: true },
+  // Internal: partner-iframe embed widgets index. Lives on the
+  // explorer itself, not the marketing site, so it's the one footer
+  // link that isn't an off-site domain. Sits next to docs because the
+  // audience is the same: developers integrating against the chain.
+  { label: 'embed widgets', href: '/embed' },
   {
     label: 'github / ligate-io',
     href: 'https://github.com/ligate-io',
