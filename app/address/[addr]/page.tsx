@@ -4,6 +4,7 @@ import { getAddress, getAddressTxs, getStatsTotals } from '@/lib/api'
 import { buildAddressLabels } from '@/lib/address-labels'
 import { fmtLgt, trunc } from '@/lib/format'
 import { AddressBadge } from '@/components/address-badge'
+import { AddressQr } from '@/components/address-qr'
 import { CopyButton } from '@/components/copy-button'
 import { TxsTable } from '@/components/tables'
 import { Eyebrow, FrameCard } from '@/components/ui'
@@ -63,40 +64,73 @@ export default async function AddressPage({
         </Link>
       </div>
       <Eyebrow>Address</Eyebrow>
+      {/* Headline row: QR + address column. QR sits on the left so
+          phones scanning the page can grab the address visually
+          without parsing the bech32 string. Address + copy + badges
+          column flexes around it. */}
       <div
         style={{
           marginTop: 20,
           display: 'flex',
-          alignItems: 'center',
-          gap: 16,
+          alignItems: 'flex-start',
+          gap: 20,
           flexWrap: 'wrap',
         }}
       >
+        <AddressQr value={addr} size={108} />
         <div
-          className="mono"
           style={{
-            fontSize: 20,
-            color: 'var(--color-ink)',
-            wordBreak: 'break-all',
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
           }}
         >
-          {addr}
-        </div>
-        <CopyButton value={addr} />
-        <AddressBadge addr={addr} labels={labels} />
-        {role ? (
-          <span
-            className="role-chip"
+          <div
             style={{
-              borderColor: 'var(--color-accent)',
-              color: 'var(--color-accent)',
-              fontSize: 10,
-              padding: '4px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+              flexWrap: 'wrap',
             }}
           >
-            {role}
-          </span>
-        ) : null}
+            <div
+              className="mono"
+              style={{
+                fontSize: 20,
+                color: 'var(--color-ink)',
+                wordBreak: 'break-all',
+              }}
+            >
+              {addr}
+            </div>
+            <CopyButton value={addr} />
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
+            <AddressBadge addr={addr} labels={labels} />
+            {role ? (
+              <span
+                className="role-chip"
+                style={{
+                  borderColor: 'var(--color-accent)',
+                  color: 'var(--color-accent)',
+                  fontSize: 10,
+                  padding: '4px 8px',
+                }}
+              >
+                {role}
+              </span>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div
@@ -242,7 +276,11 @@ export default async function AddressPage({
               </span>
             </div>
           ) : (
-            <TxsTable rows={recentTxs} labels={labels} />
+            <TxsTable
+              rows={recentTxs}
+              labels={labels}
+              suppressLabelFor={addr}
+            />
           )}
         </FrameCard>
       </div>
