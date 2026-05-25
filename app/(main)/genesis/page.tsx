@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 // `/genesis` — origin facts for ligate-devnet-1. Block #1's timestamp
 // is the genesis time (the chain doesn't expose a dedicated genesis
 // metadata endpoint, but block 1 carries the same data). Supply is
-// the genesis pin (1B LGT) which still matches today since devnet
+// the genesis pin (1B AVOW) which still matches today since devnet
 // doesn't inflate.
 //
 // Surfaces: chain ID, genesis time, initial supply, chain hash,
@@ -54,7 +54,7 @@ export default async function GenesisPage() {
           }}
         >
           ligate-devnet-1 was bootstrapped on {genesisDateString} with a
-          single sequencer, 1B LGT pinned in the bank module, and{' '}
+          single sequencer, 1B AVOW pinned in the bank module, and{' '}
           {info.da_layer} fronting data availability. The block #1 hash
           + proposer below are the canonical anchors any verifier
           re-derives from.
@@ -78,7 +78,7 @@ export default async function GenesisPage() {
           },
           {
             label: 'Initial supply',
-            value: fmtLgtCompact(initialSupplyNano) + ' LGT',
+            value: fmtLgtCompact(initialSupplyNano) + ' AVOW',
             mono: true,
           },
         ].map((t, i) => (
@@ -244,7 +244,7 @@ export default async function GenesisPage() {
         >
           Devnet-1 has a single sequencer for the duration of the network.
           No slashing, no leader rotation, no validator set governance.
-          The genesis allocation pins 1B LGT in the bank module which
+          The genesis allocation pins 1B AVOW in the bank module which
           drains as the operator funds the faucet, registers protocol
           schemas, and routes protocol fees through the treasury wallet.
           Mainnet replaces all of this with proper validator set

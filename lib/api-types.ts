@@ -184,7 +184,7 @@ export interface StatsTotals {
   schemas: number
   attestor_sets: number
   attestations: number
-  /** Total LGT supply in nano. Now reliably populated post ligate-api
+  /** Total AVOW supply in nano. Now reliably populated post ligate-api
    *  PR #42 (the supply query was hitting a hex path the chain
    *  rejected; switched to bech32m token_…). The fallback at the
    *  fetcher level still kicks in if the whole stats endpoint 5xx's,
@@ -305,5 +305,5 @@ export interface TopHolder {
   rank: number
   address: string
   balance_nano: string
-  balance_lgt: number
+  balance_avow: number
 }

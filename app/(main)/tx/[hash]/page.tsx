@@ -139,7 +139,7 @@ export default async function TxPage({
 
       {/* Action card: type-aware summary of what the tx actually did.
           Sits above the boilerplate header/execution/payload grid so
-          the reader sees "100 LGT moved A → B" before "nonce 4". */}
+          the reader sees "100 AVOW moved A → B" before "nonce 4". */}
       <div style={{ marginBottom: 36 }}>
         <ActionCard tx={tx} />
       </div>
@@ -257,7 +257,7 @@ export default async function TxPage({
                   // "0" string (ligate-api PR #45 Tier 3.1) — was null
                   // before, which forced the "not exposed yet"
                   // placeholder. Devnet runs gas_price = 0 so the
-                  // displayed value is "0 LGT" everywhere; that's
+                  // displayed value is "0 AVOW" everywhere; that's
                   // honest, not a stub.
                   label: 'Gas fee',
                   value: <FeeValue nano={tx.fee_nano} fallback="0" />,
@@ -451,7 +451,7 @@ export default async function TxPage({
   )
 }
 
-// Renders an LGT amount with `"0 LGT"` for zero values and a coloured
+// Renders an AVOW amount with `"0 AVOW"` for zero values and a coloured
 // real number when non-zero. `fallback` was the old "not exposed yet"
 // placeholder used while the api shipped null for gas — that path is
 // gone (ligate-api PR #45 Tier 3.1 ships fee_paid_nano as a real "0").
@@ -470,14 +470,14 @@ function FeeValue({
   if (nano === '0' || nano === '' || nano == null) {
     return (
       <>
-        0 <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+        0 <span style={{ color: 'var(--color-subtle)' }}>AVOW</span>
       </>
     )
   }
   return (
     <span style={{ color: colorOverride }}>
       {fmtLgt(nano)}{' '}
-      <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+      <span style={{ color: 'var(--color-subtle)' }}>AVOW</span>
     </span>
   )
 }
@@ -608,7 +608,7 @@ function TransferAction({
             className="mono"
             style={{ fontSize: 14, color: 'var(--color-subtle)' }}
           >
-            LGT
+            AVOW
           </span>
         </div>
       </div>

@@ -43,8 +43,8 @@ export default async function BlocksPage({
   const totalTxs = all.reduce((acc, b) => acc + b.tx_count, 0)
   const avgTxs = all.length > 0 ? (totalTxs / all.length).toFixed(2) : '0.00'
   // Real fees = gas paid (currently 0 — indexer doesn't surface
-  // fee_paid_nano yet) + protocol burn (real numbers, e.g. 0.10 LGT
-  // per RegisterSchema, 0.0001 LGT per SubmitAttestation). Summing
+  // fee_paid_nano yet) + protocol burn (real numbers, e.g. 0.10 AVOW
+  // per RegisterSchema, 0.0001 AVOW per SubmitAttestation). Summing
   // both matches what the block-detail page shows in its Fees total
   // row, and lines up with the brief: "Block detail FEES TOTAL: sum
   // fee_paid_nano + protocol_fee_nano".
@@ -76,7 +76,7 @@ export default async function BlocksPage({
       label: 'Fees collected',
       value: fmtLgtTrim(totalFees.toString()),
       serif: true,
-      suffix: 'LGT',
+      suffix: 'AVOW',
       sub: `Σ gas + protocol · ${allTxs.length} tx${allTxs.length === 1 ? '' : 's'} sample`,
     },
   ]

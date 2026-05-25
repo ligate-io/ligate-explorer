@@ -132,7 +132,7 @@ export function SupplyCard({
           {totalLgt != null ? (
             <>
               {totalLgt.toLocaleString()}{' '}
-              <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+              <span style={{ color: 'var(--color-subtle)' }}>AVOW</span>
             </>
           ) : (
             <span style={{ color: 'var(--color-subtle)' }}>unknown</span>
@@ -605,7 +605,7 @@ export function AttestorSetsCard({ sets }: { sets: AttestorSetItem[] }) {
 // Pre-population the api returns null for every tx, so derived
 // percentiles would be 0 / 0 / 0. Caller passes `tiers` when real
 // fee data is computed; without it, this renders an honest empty
-// state instead of fake LGT prices.
+// state instead of fake AVOW prices.
 export function FeeTrackerCard({
   tiers,
 }: {
@@ -682,7 +682,7 @@ export function FeeTrackerCard({
                 letterSpacing: '0.1em',
               }}
             >
-              {empty ? t.sub : `LGT · ${t.sub}`}
+              {empty ? t.sub : `AVOW · ${t.sub}`}
             </div>
           </div>
         ))}
@@ -790,7 +790,7 @@ export function StatsStrip({
     // DA-settlement breakdown still lives on /info under "Finality
     // breakdown".
     { label: 'Block time', value: info.finality, mono: true },
-    { label: 'LGT supply', value: fmtLgtCompact(info.supply_nano), mono: true },
+    { label: 'AVOW supply', value: fmtLgtCompact(info.supply_nano), mono: true },
     {
       // Network status reads `info.network_status` (was hardcoded to
       // "SYNCED" before, which silently lied during api outages).

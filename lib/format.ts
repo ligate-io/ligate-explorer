@@ -31,7 +31,7 @@ export function fmtLgtTrim(nano: bigint | string | number): string {
   return small ? `${big.toString()}.${small}` : big.toString()
 }
 
-// Human-readable LGT amount with thousands separators on the integer
+// Human-readable AVOW amount with thousands separators on the integer
 // part and trailing zeros trimmed off the fractional part. Use for
 // supply tiles or anywhere a round integer should read as a number,
 // not as a 9-decimal token amount.
