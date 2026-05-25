@@ -7,7 +7,7 @@ export default function Loading() {
   return (
     <>
       <div style={{ paddingTop: 16 }}>
-        <Eyebrow>LGT holders</Eyebrow>
+        <Eyebrow>AVOW holders</Eyebrow>
         <div style={{ marginTop: 24, maxWidth: 540 }}>
           <SkelBlock width="80%" height={44} style={{ display: 'block' }} />
           <div style={{ marginTop: 20 }}>

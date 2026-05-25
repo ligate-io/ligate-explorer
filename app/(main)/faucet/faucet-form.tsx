@@ -117,7 +117,7 @@ export function FaucetForm() {
                   fontFamily: 'var(--font-serif)',
                 }}
               >
-                100 LGT
+                100 AVOW
               </span>
             </div>
             <button
@@ -154,7 +154,7 @@ export function FaucetForm() {
                 'Cool down'
               ) : (
                 <>
-                  Request 100 LGT <ArrowRight />
+                  Request 100 AVOW <ArrowRight />
                 </>
               )}
             </button>
@@ -398,7 +398,7 @@ function SuccessToast({ hash, addr }: { hash: string; addr: string }) {
               className="mono"
               style={{ fontSize: 11, color: 'var(--color-subtle)' }}
             >
-              LGT
+              AVOW
             </span>
           </div>
         </div>
@@ -428,7 +428,7 @@ function SuccessToast({ hash, addr }: { hash: string; addr: string }) {
             {tx.fee_paid_nano && tx.fee_paid_nano !== '0' ? (
               <>
                 {fmtLgt(tx.fee_paid_nano)}{' '}
-                <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+                <span style={{ color: 'var(--color-subtle)' }}>AVOW</span>
               </>
             ) : (
               <span style={{ color: 'var(--color-subtle)' }}>not exposed</span>
@@ -436,7 +436,7 @@ function SuccessToast({ hash, addr }: { hash: string; addr: string }) {
           </span>
           {tx.protocol_fee_nano && tx.protocol_fee_nano !== '0' ? (
             <span style={{ color: 'var(--color-amber)' }}>
-              + {fmtLgtTrim(tx.protocol_fee_nano)} LGT proto
+              + {fmtLgtTrim(tx.protocol_fee_nano)} AVOW proto
             </span>
           ) : null}
         </div>

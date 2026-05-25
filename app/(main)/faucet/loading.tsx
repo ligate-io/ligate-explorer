@@ -36,7 +36,7 @@ export default function Loading() {
         >
           Get test{' '}
           <em style={{ fontStyle: 'italic', color: 'var(--color-accent)' }}>
-            LGT
+            AVOW
           </em>
         </h1>
         <p
@@ -47,7 +47,7 @@ export default function Loading() {
             maxWidth: 540,
           }}
         >
-          Drip 100 LGT into a devnet address. One drip per address every 24 hours. Funds are testnet-only and have no value.
+          Drip 100 AVOW into a devnet address. One drip per address every 24 hours. Funds are testnet-only and have no value.
         </p>
 
         {/* Form silhouette. Matches FaucetForm's outer .frame
@@ -96,7 +96,7 @@ export default function Loading() {
                   fontFamily: 'var(--font-serif)',
                 }}
               >
-                100 LGT
+                100 AVOW
               </span>
             </div>
             <SkelBlock width={180} height={44} />
@@ -110,7 +110,7 @@ export default function Loading() {
         <div className="grid-stats-3" style={{ marginTop: 56, gap: 24 }}>
           {[
             { k: 'Limit', v: '1 drip / address / 24h', skel: false },
-            { k: 'Per drip', v: '100 LGT', skel: false },
+            { k: 'Per drip', v: '100 AVOW', skel: false },
             { k: 'Confirmation', v: '', skel: true },
           ].map((it) => (
             <div key={it.k}>
@@ -212,7 +212,7 @@ export default function Loading() {
                 marginBottom: 6,
               }}
             >
-              Need more than 100 LGT?
+              Need more than 100 AVOW?
             </div>
             <div
               style={{

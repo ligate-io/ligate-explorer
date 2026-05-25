@@ -43,9 +43,9 @@ export default async function BlockPage({
 
   // Slot-level fees aren't on the wire (the api adapter ships "0").
   // Sum gas + protocol across the block's txs to get an honest total.
-  // ligate-api PR #43 brief explicitly calls this out: "The '0 LGT'
+  // ligate-api PR #43 brief explicitly calls this out: "The '0 AVOW'
   // the explorer currently shows on attestation blocks is wrong —
-  // it'll be 0.05–0.10 LGT once you sum both."
+  // it'll be 0.05–0.10 AVOW once you sum both."
   let feesTotal = 0n
   for (const t of blockTxs) {
     if (t.fee_nano) feesTotal += BigInt(t.fee_nano)
@@ -329,11 +329,11 @@ export default async function BlockPage({
                     feesTotal > 0n ? (
                       <>
                         {fmtLgt(feesTotal.toString())}{' '}
-                        <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+                        <span style={{ color: 'var(--color-subtle)' }}>AVOW</span>
                       </>
                     ) : (
                       <>
-                        0 <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+                        0 <span style={{ color: 'var(--color-subtle)' }}>AVOW</span>
                       </>
                     ),
                 },

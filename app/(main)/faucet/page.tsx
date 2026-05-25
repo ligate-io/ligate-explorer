@@ -44,7 +44,7 @@ export default async function FaucetPage() {
   const sampleSaturated =
     treasuryTxs.items.length >= 100 && treasuryTxs.nextCursor != null
   const poolLabel = totals?.treasury_balance_nano
-    ? fmtLgtCompact(totals.treasury_balance_nano) + ' LGT'
+    ? fmtLgtCompact(totals.treasury_balance_nano) + ' AVOW'
     : '—'
 
   const confirmation = info?.finality ?? '~12s'
@@ -77,7 +77,7 @@ export default async function FaucetPage() {
         >
           Get test{' '}
           <em style={{ fontStyle: 'italic', color: 'var(--color-accent)' }}>
-            LGT
+            AVOW
           </em>
         </h1>
         <p
@@ -88,7 +88,7 @@ export default async function FaucetPage() {
             maxWidth: 540,
           }}
         >
-          Drip 100 LGT into a devnet address. One drip per address every 24 hours. Funds are testnet-only and have no value.
+          Drip 100 AVOW into a devnet address. One drip per address every 24 hours. Funds are testnet-only and have no value.
         </p>
 
         <FaucetForm />
@@ -99,7 +99,7 @@ export default async function FaucetPage() {
         >
           {[
             { k: 'Limit', v: '1 drip / address / 24h' },
-            { k: 'Per drip', v: '100 LGT' },
+            { k: 'Per drip', v: '100 AVOW' },
             { k: 'Confirmation', v: confirmation },
           ].map((it) => (
             <div key={it.k}>
@@ -194,7 +194,7 @@ export default async function FaucetPage() {
           </div>
         ) : null}
 
-        {/* Discord callout. The public faucet caps at 100 LGT per
+        {/* Discord callout. The public faucet caps at 100 AVOW per
             address per 24h; anyone needing bulk drips for chain
             integration / load testing runs the `/faucet` slash
             command in our Discord, which the bot routes through the
@@ -229,7 +229,7 @@ export default async function FaucetPage() {
                 marginBottom: 6,
               }}
             >
-              Need more than 100 LGT?
+              Need more than 100 AVOW?
             </div>
             <div
               style={{

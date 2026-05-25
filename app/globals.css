@@ -1205,7 +1205,7 @@ html[data-drawer-open='true'] body {
 .h-detail-xl {
   font-size: clamp(48px, 9vw, 96px);
 }
-/* Mid-tier H1 (info page Ligate Chain devnet, faucet "Get test LGT"). */
+/* Mid-tier H1 (info page Ligate Chain devnet, faucet "Get test AVOW"). */
 .h-detail-lg {
   font-size: clamp(40px, 8vw, 88px);
 }

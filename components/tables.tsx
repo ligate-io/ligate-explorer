@@ -61,7 +61,7 @@ function TypeDotCombined({
 //   can see both components.
 //
 //   compact (homepage latest-txs card): one-line — gas + protocol
-//   summed into a single LGT amount. Colored amber when a protocol
+//   summed into a single AVOW amount. Colored amber when a protocol
 //   portion exists (visual cue this row paid a burn) so the signal
 //   isn't lost. Critical for the homepage because rows-with-protocol
 //   vs rows-without must end up the same height — otherwise the
@@ -89,12 +89,12 @@ function FeeCell({
         }}
         title={
           hasProtocol
-            ? `Gas + protocol burn: ${fmtLgt(feeNano)} + ${fmtLgtTrim(protoNano)} LGT`
+            ? `Gas + protocol burn: ${fmtLgt(feeNano)} + ${fmtLgtTrim(protoNano)} AVOW`
             : undefined
         }
       >
         {fmtLgtTrim(total)}{' '}
-        <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+        <span style={{ color: 'var(--color-subtle)' }}>AVOW</span>
       </span>
     )
   }
@@ -102,7 +102,7 @@ function FeeCell({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <span className="mono" style={{ color: 'var(--color-bone)', fontSize: 11 }}>
         {fmtLgt(feeNano)}{' '}
-        <span style={{ color: 'var(--color-subtle)' }}>LGT</span>
+        <span style={{ color: 'var(--color-subtle)' }}>AVOW</span>
       </span>
       {hasProtocol ? (
         <span
@@ -114,7 +114,7 @@ function FeeCell({
           }}
           title="Protocol fee burned at execution."
         >
-          + {fmtLgtTrim(protoNano)} LGT proto
+          + {fmtLgtTrim(protoNano)} AVOW proto
         </span>
       ) : null}
     </div>
@@ -146,7 +146,7 @@ function ActionInline({ tx }: { tx: Tx }) {
       </span>
       <span style={{ color: 'var(--color-subtle)' }}>·</span>
       <span style={{ color: 'var(--color-accent)' }}>
-        {fmtLgtTrim(t.amount_nano)} LGT
+        {fmtLgtTrim(t.amount_nano)} AVOW
       </span>
     </div>
   )

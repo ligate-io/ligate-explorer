@@ -24,11 +24,11 @@ import type {
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://api.ligate.io";
 const rpcBase = process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.ligate.io";
-// Genesis-pinned token id for $LGT on ligate-devnet-1. The chain's
+// Genesis-pinned token id for AVOW on ligate-devnet-1. The chain's
 // `gas_token_config.token_id` writes this; it's stable across the
 // devnet's life. Override via env if the token id ever changes.
-const lgtTokenId =
-  process.env.NEXT_PUBLIC_LGT_TOKEN_ID ??
+const avowTokenId =
+  process.env.NEXT_PUBLIC_AVOW_TOKEN_ID ??
   "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7";
 const daLayer = process.env.NEXT_PUBLIC_DA_LAYER ?? "Celestia (mocha-4)";
 // Fallback finality string when there aren't enough blocks yet to
@@ -39,7 +39,7 @@ const fallbackFinality = process.env.NEXT_PUBLIC_FINALITY ?? "~12s";
 // blip, chain pause). Defaults to the genesis pin (1B). The live read
 // in getInfo() supersedes this whenever the chain answers.
 const fallbackLgtSupplyNano =
-  process.env.NEXT_PUBLIC_LGT_SUPPLY ?? "1000000000000000000"; // 1B LGT
+  process.env.NEXT_PUBLIC_AVOW_SUPPLY ?? "1000000000000000000"; // 1B AVOW
 
 // Per-endpoint cache TTLs in seconds. Mirrors the api's Cache-Control
 // max-age values (ligate-api PR #49 Tier 0). Why we re-encode them
@@ -249,7 +249,7 @@ interface ApiDripResponse {
   address: string;
   tx_hash: string;
   amount_nano: number;
-  drip_amount_lgt: number;
+  drip_amount_avow: number;
 }
 
 /**
@@ -279,7 +279,7 @@ interface ApiAddressDripStatusResponse {
  * still don't have a direct chain source and come from env:
  *
  * - `finality`: NEXT_PUBLIC_FINALITY, defaults to "~12s" (Celestia mocha).
- * - `supply_nano`: NEXT_PUBLIC_LGT_SUPPLY, defaults to 100M LGT
+ * - `supply_nano`: NEXT_PUBLIC_AVOW_SUPPLY, defaults to 100M AVOW
  *   (the genesis pin on devnet, which doesn't inflate). Will become a
  *   live read when the api adds /v1/bank/supply.
  * - `da_layer`: NEXT_PUBLIC_DA_LAYER, defaults to "Celestia (mocha-4)".

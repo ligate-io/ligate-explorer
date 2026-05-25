@@ -30,7 +30,7 @@ Devnet without an explorer is a black hole for users. This frontend renders the 
 - Transaction detail view (sender, type, status, fee, signatures).
 - Address detail (balance, recent tx history).
 - Schema browser (name, version, attestor set, fees, recent attestations).
-- One-click `$LGT` faucet for testing on devnet.
+- One-click `AVOW` faucet for testing on devnet.
 - Search bar that auto-routes by input shape (`lig1...`, `lsc1...`, 64-char hex).
 
 UX inspiration: [Celenium](https://celenium.io/) (Celestia's block explorer). Differentiator is content (attestation primitives), not novel UX.

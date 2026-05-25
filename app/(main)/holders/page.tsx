@@ -67,7 +67,7 @@ export default async function HoldersPage() {
   return (
     <>
       <div style={{ paddingTop: 16 }}>
-        <Eyebrow>LGT holders</Eyebrow>
+        <Eyebrow>AVOW holders</Eyebrow>
         <h1
           className="serif h-hero"
           style={{
@@ -215,7 +215,7 @@ export default async function HoldersPage() {
                       >
                         {fmtLgtTrim(h.balance_nano)}{' '}
                         <span style={{ color: 'var(--color-subtle)' }}>
-                          LGT
+                          AVOW
                         </span>
                       </span>
                     </td>

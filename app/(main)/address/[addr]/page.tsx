@@ -148,7 +148,7 @@ export default async function AddressPage({
               marginBottom: 12,
             }}
           >
-            LGT balance
+            AVOW balance
           </div>
           <div
             className="serif"
@@ -244,7 +244,7 @@ export default async function AddressPage({
               ).split('.')[0]}
               <span style={{ color: 'var(--color-subtle)', fontSize: 22 }}>
                 {' '}
-                LGT
+                AVOW
               </span>
             </div>
             <div

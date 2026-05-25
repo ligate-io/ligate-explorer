@@ -282,15 +282,15 @@ function FeeBreakdown({
         {hasGas ? (
           <>
             {fmtLgt(gas)}{' '}
-            <span style={{ color: 'var(--color-subtle)' }}>LGT gas</span>
+            <span style={{ color: 'var(--color-subtle)' }}>AVOW gas</span>
           </>
         ) : (
-          <span style={{ color: 'var(--color-subtle)' }}>0 LGT gas</span>
+          <span style={{ color: 'var(--color-subtle)' }}>0 AVOW gas</span>
         )}
       </span>
       {hasProto ? (
         <span style={{ color: 'var(--color-amber)', fontSize: 12 }}>
-          + {fmtLgtTrim(proto)} LGT protocol
+          + {fmtLgtTrim(proto)} AVOW protocol
         </span>
       ) : null}
     </span>
