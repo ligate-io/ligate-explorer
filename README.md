@@ -20,7 +20,7 @@ By default the dev server reads from typed mock fixtures (every route renders wi
 
 **Devnet.** This repo is the Next.js frontend only — the Rust indexer + Postgres surface lives in [`ligate-io/ligate-api`](https://github.com/ligate-io/ligate-api).
 
-`ligate-devnet-1` is targeted for **Q2 2026**.
+`ligate-devnet-2` is targeted for **Q2 2026**.
 
 ## What this is
 

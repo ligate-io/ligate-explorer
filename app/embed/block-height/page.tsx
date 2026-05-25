@@ -20,7 +20,7 @@ export default async function BlockHeightEmbed() {
   return (
     <LiveBlockHeight
       initial={{
-        chainId: info?.chain_id ?? 'ligate-devnet-1',
+        chainId: info?.chain_id ?? 'ligate-devnet-2',
         latestBlock: info?.latest_block ?? 0,
       }}
     />

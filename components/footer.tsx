@@ -60,7 +60,7 @@ export function Footer() {
           ))}
         </div>
         <div className="col" style={{ color: 'var(--color-subtle)' }}>
-          ligate-devnet-1
+          ligate-devnet-2
         </div>
       </div>
     </footer>

@@ -8,7 +8,7 @@ import { Eyebrow, FrameCard, LV } from '@/components/ui'
 export const metadata: Metadata = { title: 'Genesis' }
 export const dynamic = 'force-dynamic'
 
-// `/genesis` — origin facts for ligate-devnet-1. Block #1's timestamp
+// `/genesis` — origin facts for ligate-devnet-2. Block #1's timestamp
 // is the genesis time (the chain doesn't expose a dedicated genesis
 // metadata endpoint, but block 1 carries the same data). Supply is
 // the genesis pin (1B AVOW) which still matches today since devnet
@@ -53,7 +53,7 @@ export default async function GenesisPage() {
             marginTop: 20,
           }}
         >
-          ligate-devnet-1 was bootstrapped on {genesisDateString} with a
+          ligate-devnet-2 was bootstrapped on {genesisDateString} with a
           single sequencer, 1B AVOW pinned in the bank module, and{' '}
           {info.da_layer} fronting data availability. The block #1 hash
           + proposer below are the canonical anchors any verifier
