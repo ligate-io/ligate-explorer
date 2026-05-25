@@ -7,7 +7,7 @@ import { Eyebrow } from '@/components/ui'
 export const metadata: Metadata = { title: 'Sequencer' }
 export const dynamic = 'force-dynamic'
 
-// Single-sequencer surface for ligate-devnet-1. The chain has one
+// Single-sequencer surface for ligate-devnet-2. The chain has one
 // operator producing every block; this page reads the proposer field
 // off the most-recent slot, falls back through the recent-slots
 // sample for the first non-null entry (legacy pre-PR-#44 slots ship
@@ -62,7 +62,7 @@ export default async function SequencerPage() {
             marginTop: 20,
           }}
         >
-          ligate-devnet-1 runs with one sequencer for the full devnet
+          ligate-devnet-2 runs with one sequencer for the full devnet
           window. Every slot below was proposed by the operator wallet
           and posted to {info.da_layer} for data availability. Multi-sequencer
           ships at testnet.

@@ -152,7 +152,7 @@ function ActionInline({ tx }: { tx: Tx }) {
   )
 }
 
-// PROPOSER column dropped: ligate-devnet-1 is single-sequencer so
+// PROPOSER column dropped: ligate-devnet-2 is single-sequencer so
 // every row would say the same operator address. The api also returns
 // `null` for `proposer` until the chain ships leader rotation
 // (chain#82). When that lands, restore as a column or surface as a

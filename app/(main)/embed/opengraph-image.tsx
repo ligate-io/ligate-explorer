@@ -34,7 +34,7 @@ const PATH_TOP =
 
 export default async function EmbedOgImage() {
   const info = await getInfo().catch(() => null)
-  const chainId = info?.chain_id ?? 'ligate-devnet-1'
+  const chainId = info?.chain_id ?? 'ligate-devnet-2'
 
   // The four miniature widget cards rendered along the bottom band.
   // Hardcoded labels (not live data) because Satori-rendered text needs

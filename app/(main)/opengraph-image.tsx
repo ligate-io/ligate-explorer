@@ -34,7 +34,7 @@ const PATH_TOP =
 
 export default async function OgImage() {
   const info = await getInfo().catch(() => null)
-  const chainId = info?.chain_id ?? 'ligate-devnet-1'
+  const chainId = info?.chain_id ?? 'ligate-devnet-2'
   const block =
     info?.latest_block != null
       ? `#${info.latest_block.toLocaleString()}`

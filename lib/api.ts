@@ -24,7 +24,7 @@ import type {
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://api.ligate.io";
 const rpcBase = process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.ligate.io";
-// Genesis-pinned token id for AVOW on ligate-devnet-1. The chain's
+// Genesis-pinned token id for AVOW on ligate-devnet-2. The chain's
 // `gas_token_config.token_id` writes this; it's stable across the
 // devnet's life. Override via env if the token id ever changes.
 const avowTokenId =

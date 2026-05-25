@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "explorer",
+      "runtimeExecutable": "/Users/stefdev/.nvm/versions/node/v22.18.0/bin/node",
+      "runtimeArgs": ["./node_modules/.bin/next", "dev", "--port", "3030"],
+      "port": 3030
+    }
+  ]
+}

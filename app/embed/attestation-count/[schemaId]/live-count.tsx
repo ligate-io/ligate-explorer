@@ -163,7 +163,7 @@ export function LiveSchemaAttestationCount({
             boxShadow: '0 0 6px #a7d28c',
           }}
         />
-        Live · updated {ageSec}s ago · ligate-devnet-1
+        Live · updated {ageSec}s ago · ligate-devnet-2
       </div>
     </a>
   )

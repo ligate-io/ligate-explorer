@@ -241,7 +241,7 @@ export default async function EmbedIndexPage() {
           maxWidth: 620,
         }}
       >
-        Widgets target ligate-devnet-1. When testnet ships, the same
+        Widgets target ligate-devnet-2. When testnet ships, the same
         URLs will switch domains; the iframe contract stays. Need a
         widget shape that isn&apos;t here yet? Pinged us on{' '}
         <a

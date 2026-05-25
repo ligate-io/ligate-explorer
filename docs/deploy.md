@@ -117,7 +117,7 @@ curl -i -X OPTIONS https://api.ligate.io/v1/drip \
 
 Should return `Access-Control-Allow-Origin` matching the explorer's origin.
 
-### Wrong chain rendering ("ligate-localnet" instead of "ligate-devnet-1")
+### Wrong chain rendering ("ligate-localnet" instead of "ligate-devnet-2")
 
 `NEXT_PUBLIC_API_URL` is wrong (pointing at a localnet). Verify the env var in Vercel; re-deploy after updating (Vercel doesn't auto-rebuild on env-var change).
 
