@@ -17,6 +17,8 @@ const TYPES: ('All' | TxType)[] = [
   'RegisterSchema',
   'RegisterAttestorSet',
   'Transfer',
+  'Bounty',
+  'Contract',
   'BondSequencer',
   'SubmitProof',
 ]
@@ -64,6 +66,10 @@ function pascalToWireKind(t: 'All' | TxType): string | null {
       return 'transfer'
     case 'RegisterAttestorSet':
       return 'register_attestor_set'
+    case 'Bounty':
+      return 'bounty_event'
+    case 'Contract':
+      return 'contract_event'
     case 'BondSequencer':
       return 'bond_sequencer'
     case 'SubmitProof':

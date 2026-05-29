@@ -471,6 +471,13 @@ function kindToTxType(kind: string): TxType {
       return "RegisterAttestorSet";
     case "submit_attestation":
       return "SubmitAttestation";
+    // Bounty + contract lifecycle txs (the api emits one `kind` per
+    // module; the specific transition lives in `details.event`). Map to
+    // their own pill so a PostContract no longer renders as "Transfer".
+    case "bounty_event":
+      return "Bounty";
+    case "contract_event":
+      return "Contract";
     // Unknown / future kinds collapse to Transfer for the pill. The
     // full kind is still visible in the JSON payload viewer.
     default:
@@ -508,6 +515,8 @@ function adaptTxResponse(r: ApiTxResponse): Tx {
     height: r.block_height,
     block_hash: r.block_hash ?? "",
     sender: r.sender ?? "",
+    // Decoded signer pubkey (ligate-api #550). Null on body-less txs.
+    sender_pubkey: r.sender_pubkey ?? null,
     type: kindToTxType(r.kind),
     status: outcomeToStatus(r.outcome),
     fee_nano: r.fee_paid_nano ?? "0",
@@ -517,7 +526,11 @@ function adaptTxResponse(r: ApiTxResponse): Tx {
     // ones the typed Tx interface promotes.
     raw_response: r as unknown as Record<string, unknown>,
     gas_used: 0,
-    nonce: r.nonce ?? 0,
+    // Real nonce from the decoded body (ligate-api #550), or null for
+    // body-less txs. Pass null through instead of coercing to 0 so the
+    // detail page can render an honest "not exposed" rather than a
+    // misleading nonce of zero.
+    nonce: r.nonce ?? null,
     timestamp: rfc3339ToMillis(r.block_timestamp),
     payload: r.details,
     events: [],
