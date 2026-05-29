@@ -136,6 +136,10 @@ function kindToTxType(kind: string): TxType {
       return 'RegisterAttestorSet'
     case 'submit_attestation':
       return 'SubmitAttestation'
+    case 'bounty_event':
+      return 'Bounty'
+    case 'contract_event':
+      return 'Contract'
     default:
       return 'Transfer'
   }
@@ -175,13 +179,14 @@ function adaptTxResponse(r: ApiTxResponse): Tx {
     height: r.block_height,
     block_hash: r.block_hash ?? '',
     sender: r.sender ?? '',
+    sender_pubkey: r.sender_pubkey ?? null,
     type: kindToTxType(r.kind),
     status: outcomeToStatus(r.outcome),
     fee_nano: r.fee_paid_nano ?? '0',
     protocol_fee_nano: r.protocol_fee_nano ?? '0',
     raw_response: r as unknown as Record<string, unknown>,
     gas_used: 0,
-    nonce: r.nonce ?? 0,
+    nonce: r.nonce ?? null,
     timestamp: rfc3339ToMillis(r.block_timestamp),
     payload: r.details,
     events: [],

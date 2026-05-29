@@ -204,6 +204,41 @@ export default async function TxPage({
                   ),
                 },
                 {
+                  // Signer pubkey (bech32m `lpk1...`), decoded from the
+                  // tx body (ligate-api #550). Not a clickable address
+                  // (no /pubkey page); rendered as truncated mono text
+                  // with a copy chip. "not exposed" on body-less txs.
+                  label: 'Sender pubkey',
+                  value: tx.sender_pubkey ? (
+                    <span
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 16,
+                        minWidth: 0,
+                      }}
+                    >
+                      <span
+                        className="h-mono"
+                        title={tx.sender_pubkey}
+                        style={{
+                          wordBreak: 'break-all',
+                          minWidth: 0,
+                          color: 'var(--color-bone)',
+                        }}
+                      >
+                        {trunc(tx.sender_pubkey, 14, 12)}
+                      </span>
+                      <CopyButton value={tx.sender_pubkey} compact />
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--color-subtle)' }}>
+                      not exposed
+                    </span>
+                  ),
+                },
+                {
                   label: 'Type',
                   value: (
                     <span style={{ color: 'var(--color-accent)' }}>
@@ -291,7 +326,23 @@ export default async function TxPage({
                     </span>
                   ),
                 },
-                { label: 'Nonce', value: tx.nonce },
+                {
+                  // Real per-account nonce, decoded from the tx body
+                  // (ligate-api #550). `null` on body-less txs ingested
+                  // before the chain persisted bodies — render "not
+                  // exposed" rather than a misleading 0. Note `!= null`
+                  // (not truthiness) so a legitimate nonce of 0 still
+                  // renders as 0.
+                  label: 'Nonce',
+                  value:
+                    tx.nonce != null ? (
+                      tx.nonce
+                    ) : (
+                      <span style={{ color: 'var(--color-subtle)' }}>
+                        not exposed
+                      </span>
+                    ),
+                },
               ]}
             />
           </div>

@@ -17,6 +17,8 @@ export type TxType =
   | 'RegisterSchema'
   | 'RegisterAttestorSet'
   | 'Transfer'
+  | 'Bounty'
+  | 'Contract'
   | 'BondSequencer'
   | 'SubmitProof'
 
@@ -75,6 +77,10 @@ export interface Tx {
   height: number
   block_hash: string
   sender: string
+  /** Signer pubkey (bech32m `lpk1...`), decoded from the persisted
+   *  signed-tx body (ligate-api #550). `null` for txs ingested before
+   *  the chain started persisting bodies, whose body the api elides. */
+  sender_pubkey: string | null
   type: TxType
   status: TxStatus
   /** Gas / execution fee paid by the sender. `"0"` until the indexer
@@ -85,7 +91,11 @@ export interface Tx {
    *  kinds with no protocol fee (e.g. transfer). */
   protocol_fee_nano: string
   gas_used: number
-  nonce: number
+  /** Sequential account nonce, decoded from the tx body (ligate-api
+   *  #550). `null` for body-less txs ingested before the chain
+   *  persisted bodies; rendered as "not exposed" rather than a
+   *  misleading 0. */
+  nonce: number | null
   timestamp: number
   /** Raw RFC 0002 `details` blob. Per-kind shape:
    *  - transfer: `{ from, to, amount_nano, token_id }`
