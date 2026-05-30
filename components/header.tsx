@@ -13,6 +13,8 @@ const TABS = [
   { id: 'txs', label: 'Txs', href: '/txs' },
   { id: 'attestations', label: 'Attestations', href: '/attestations' },
   { id: 'schemas', label: 'Schemas', href: '/schemas' },
+  { id: 'bounties', label: 'Bounties', href: '/bounties' },
+  { id: 'contracts', label: 'Contracts', href: '/contracts' },
   { id: 'holders', label: 'Holders', href: '/holders' },
   { id: 'sequencer', label: 'Sequencer', href: '/sequencer' },
   { id: 'faucet', label: 'Faucet', href: '/faucet' },
@@ -32,6 +34,10 @@ function activeTab(pathname: string): string | null {
     return 'attestations'
   if (pathname.startsWith('/schemas') || pathname.startsWith('/schema/'))
     return 'schemas'
+  if (pathname.startsWith('/bounties') || pathname.startsWith('/bounty/'))
+    return 'bounties'
+  if (pathname.startsWith('/contracts') || pathname.startsWith('/contract/'))
+    return 'contracts'
   // `/address/[addr]` lights up the Holders tab too — the addresses
   // page is most often reached by drilling into a holders row, and the
   // detail page is a per-address surface of the same value distribution
@@ -116,6 +122,8 @@ function routeFromPrefix(input: string): string | null {
   if (/^lat1[a-z0-9]+$/i.test(input)) return `/attestation/${input}`
   if (/^lsc1[a-z0-9]+$/i.test(input)) return `/schema/${input}`
   if (/^las1[a-z0-9]+$/i.test(input)) return `/attestor-set/${input}`
+  if (/^lbt1[a-z0-9]+$/i.test(input)) return `/bounty/${input}`
+  if (/^lct1[a-z0-9]+$/i.test(input)) return `/contract/${input}`
   if (/^ltx1[a-z0-9]+$/i.test(input)) return `/tx/${input}`
   if (/^lig1[a-z0-9]+$/i.test(input)) return `/address/${input}`
   // Hex tx hash (chain still accepts 0x... via FromStr).
