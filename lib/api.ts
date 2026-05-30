@@ -6,7 +6,9 @@ import type {
   AttestationItem,
   AttestorSetItem,
   Block,
+  Bounty,
   ChainInfo,
+  Contract,
   DripResult,
   DripStatus,
   FinalityStats,
@@ -75,6 +77,10 @@ const TTL = {
   ATTESTOR_SET_DETAIL: 60,
   SCHEMAS_LIST: 60,
   SCHEMA_DETAIL: 60,
+  BOUNTIES_LIST: 30,
+  BOUNTY_DETAIL: 30,
+  CONTRACTS_LIST: 30,
+  CONTRACT_DETAIL: 30,
   ADDRESS_SUMMARY: 30,
   ADDRESS_TXS: 30,
 } as const;
@@ -1197,6 +1203,62 @@ export async function getAttestorSet(
     return await fetchJson<AttestorSetItem>(
       `/v1/attestor-sets/${id}`,
       ttl(TTL.ATTESTOR_SET_DETAIL),
+    );
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------
+// Bounty + contract marketplace (ligate-chain#385). The api serves the
+// indexed `bounties` / `contracts` tables; the UI types in api-types.ts
+// mirror the response shapes 1-to-1, so we fetch them directly with no
+// adapter, same as `getAttestorSet`. List endpoints use the standard
+// RFC 0001 `Page<T>` envelope.
+// ---------------------------------------------------------------------
+
+/** All bounties (api default order: newest-first). Empty on api error. */
+export async function getBounties(): Promise<Bounty[]> {
+  try {
+    const raw = await fetchJson<Page<Bounty>>(
+      "/v1/bounties?limit=100",
+      ttl(TTL.BOUNTIES_LIST),
+    );
+    return raw.data;
+  } catch {
+    return [];
+  }
+}
+
+export async function getBounty(id: string): Promise<Bounty | null> {
+  try {
+    return await fetchJson<Bounty>(
+      `/v1/bounties/${id}`,
+      ttl(TTL.BOUNTY_DETAIL),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** All contracts (api default order: newest-first). Empty on api error. */
+export async function getContracts(): Promise<Contract[]> {
+  try {
+    const raw = await fetchJson<Page<Contract>>(
+      "/v1/contracts?limit=100",
+      ttl(TTL.CONTRACTS_LIST),
+    );
+    return raw.data;
+  } catch {
+    return [];
+  }
+}
+
+export async function getContract(id: string): Promise<Contract | null> {
+  try {
+    return await fetchJson<Contract>(
+      `/v1/contracts/${id}`,
+      ttl(TTL.CONTRACT_DETAIL),
     );
   } catch {
     return null;

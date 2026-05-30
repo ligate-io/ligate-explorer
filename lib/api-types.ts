@@ -128,6 +128,58 @@ export interface Schema {
   attestation_count: number
 }
 
+/** Provenance sub-object on bounty/contract records: the tx + block
+ *  that posted the resource. Mirrors the api's `posted_at`. */
+export interface PostedAt {
+  block_height: number
+  tx_hash: string
+  timestamp: string
+}
+
+/** A marketplace contract, from `GET /v1/contracts` + `/v1/contracts/{id}`.
+ *  Mirrors ligate-api's `ContractDetailResponse` 1-to-1, so the api shape
+ *  is consumed directly (no adapter). Amounts are u128 decimal strings. */
+export interface Contract {
+  id: string
+  poster: string
+  arbiter: string
+  /** 32-byte criteria-doc hash. The chain emits it as a hex string, but
+   *  the current indexer stores the `[u8; 32]` JSON-array repr verbatim
+   *  (e.g. `"[237,60,...]"`); the detail page normalises either form to
+   *  `0x…` hex for display. */
+  criteria_doc_hash: string
+  pool_nano: string
+  escrow_remaining_nano: string
+  arbiter_fee_bps: number
+  /** `open`/`committed`/`delivered`/`accepted`/`rejected`/`disputed`/
+   *  `cancelled`/`expired`. */
+  status: string
+  expiry_da_height: number
+  dispute_window_blocks: number
+  posted_at: PostedAt
+}
+
+/** A marketplace bounty, from `GET /v1/bounties` + `/v1/bounties/{id}`.
+ *  Mirrors ligate-api's `BountyDetailResponse` 1-to-1. */
+export interface Bounty {
+  id: string
+  poster: string
+  board_schema_id: string
+  pool_nano: string
+  per_attestation_nano: string
+  escrow_remaining_nano: string
+  /** `open`/`exhausted`/`expired`/`cancelled`/`finalised`. */
+  status: string
+  /** Acceptance predicate, compact JSON mirroring the chain's
+   *  `AcceptancePredicate` enum (e.g. `{ "Any": {} }`). */
+  acceptance: Record<string, unknown>
+  expiry_da_height: number
+  dispute_window_blocks: number
+  claim_count: number
+  posted_at: PostedAt
+  last_claim_at_slot: number | null
+}
+
 // NOTE: the legacy `SchemaAttestation`, `Attestation`, and
 // `AttestorSet` interfaces were dropped. The api now ships
 // `AttestationItem` (below) for both list rows and detail responses,

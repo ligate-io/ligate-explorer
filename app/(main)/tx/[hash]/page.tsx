@@ -577,6 +577,20 @@ function ActionCard({ tx }: { tx: Tx }) {
           threshold={s.threshold}
         />
       )
+  } else if (tx.type === 'Contract') {
+    const cid =
+      typeof tx.payload?.contract_id === 'string' ? tx.payload.contract_id : null
+    const event =
+      typeof tx.payload?.event === 'string' ? tx.payload.event : null
+    if (cid)
+      body = <ResourceAction kind="Contract" href={`/contract/${cid}`} id={cid} event={event} />
+  } else if (tx.type === 'Bounty') {
+    const bid =
+      typeof tx.payload?.bounty_id === 'string' ? tx.payload.bounty_id : null
+    const event =
+      typeof tx.payload?.event === 'string' ? tx.payload.event : null
+    if (bid)
+      body = <ResourceAction kind="Bounty" href={`/bounty/${bid}`} id={bid} event={event} />
   }
 
   return (
@@ -603,6 +617,83 @@ function ActionCard({ tx }: { tx: Tx }) {
         </div>
       )}
     </FrameCard>
+  )
+}
+
+// Bounty / contract tx summary: links the tx to its resource detail
+// page and names the lifecycle event (posted / committed / claimed /
+// accepted / ...). The thin events carry only the id + event label, so
+// this is a navigation affordance rather than a full record render —
+// the resource page has the escrow / parties / terms.
+function ResourceAction({
+  kind,
+  href,
+  id,
+  event,
+}: {
+  kind: 'Contract' | 'Bounty'
+  href: string
+  id: string
+  event: string | null
+}) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr auto',
+        gap: 24,
+        alignItems: 'center',
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          className="mono"
+          style={{
+            fontSize: 9,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            color: 'var(--color-subtle)',
+            marginBottom: 6,
+          }}
+        >
+          {kind}
+        </div>
+        <Link
+          href={href}
+          className="h-mono link"
+          style={{ fontSize: 13, wordBreak: 'break-all' }}
+        >
+          {id}
+        </Link>
+      </div>
+      {event ? (
+        <div style={{ textAlign: 'right' }}>
+          <div
+            className="mono"
+            style={{
+              fontSize: 9,
+              letterSpacing: '0.22em',
+              textTransform: 'uppercase',
+              color: 'var(--color-subtle)',
+              marginBottom: 6,
+            }}
+          >
+            Event
+          </div>
+          <div
+            className="serif"
+            style={{
+              fontSize: 24,
+              color: 'var(--color-accent)',
+              lineHeight: 1,
+              textTransform: 'capitalize',
+            }}
+          >
+            {event.replace(/_/g, ' ')}
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
